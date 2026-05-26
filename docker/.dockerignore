@@ -1,0 +1,23 @@
+# Ignore version-control metadata and cached artefacts
+.git
+.gitignore
+.github
+.vscode
+
+# Python cache
+__pycache__
+*.py[cod]
+*.pyo
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Model checkpoints (large; mount via volume instead)
+*.pth
+*.ckpt
+
+# Notebook / IDE files
+*.ipynb
+.DS_Store
+Thumbs.db

@@ -35,7 +35,7 @@ from scipy.io.wavfile import read
 # ---------------------------------------------------------------------------
 # Local
 # ---------------------------------------------------------------------------
-from melo import commons
+from melo.nn import commons
 from melo.text import cleaned_text_to_sequence
 from melo.text import get_bert
 from melo.text.cleaner import clean_text

@@ -1,33 +1,31 @@
 # flake8: noqa: E402
 
+import logging
 import os
+
 import torch
+from torch.cuda.amp import GradScaler, autocast
 from torch.nn import functional as F
+from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 import torch.distributed as dist
-from torch.nn.parallel import DistributedDataParallel as DDP
-from torch.cuda.amp import autocast, GradScaler
 from tqdm import tqdm
-import logging
+
+from melo.utils import core as utils
+from melo.nn import commons
+from melo.nn.losses import discriminator_loss, feature_loss, generator_loss, kl_loss
+from melo.nn.models import DurationDiscriminator, MultiPeriodDiscriminator, SynthesizerTrn
+from melo.audio.mel_processing import mel_spectrogram_torch, spec_to_mel_torch
+from melo.text.symbols import symbols
+from melo.training.data_utils import (
+    DistributedBucketSampler,
+    TextAudioSpeakerCollate,
+    TextAudioSpeakerLoader,
+)
+from melo.utils.download import load_pretrain_model
 
 logging.getLogger("numba").setLevel(logging.WARNING)
-import commons
-import utils
-from data_utils import (
-    TextAudioSpeakerLoader,
-    TextAudioSpeakerCollate,
-    DistributedBucketSampler,
-)
-from models import (
-    SynthesizerTrn,
-    MultiPeriodDiscriminator,
-    DurationDiscriminator,
-)
-from losses import generator_loss, discriminator_loss, feature_loss, kl_loss
-from mel_processing import mel_spectrogram_torch, spec_to_mel_torch
-from text.symbols import symbols
-from melo.download_utils import load_pretrain_model
 
 torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = (

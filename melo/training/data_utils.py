@@ -23,22 +23,11 @@ import torch.utils.data
 from loguru import logger
 from tqdm import tqdm
 
-# ---------------------------------------------------------------------------
-# Path setup: ensure the melo package root is on sys.path so that bare-module
-# imports (commons, mel_processing, utils, text) resolve correctly when this
-# file is executed directly from within the melo/ directory.
-# ---------------------------------------------------------------------------
-import sys
-
-__root__ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if __root__ not in sys.path:
-    sys.path.insert(0, __root__)
-
-import commons
-from mel_processing import spectrogram_torch, mel_spectrogram_torch
-from utils import load_filepaths_and_text
-from utils import load_wav_to_torch_librosa as load_wav_to_torch
-from text import cleaned_text_to_sequence, get_bert
+from melo.nn import commons
+from melo.audio.mel_processing import spectrogram_torch, mel_spectrogram_torch
+from melo.utils.core import load_filepaths_and_text
+from melo.utils.core import load_wav_to_torch_librosa as load_wav_to_torch
+from melo.text import cleaned_text_to_sequence, get_bert
 
 
 class TextAudioSpeakerLoader(torch.utils.data.Dataset):

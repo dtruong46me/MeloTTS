@@ -1,0 +1,14 @@
+version: "3.9"
+
+services:
+  melo-ui:
+    build:
+      context: ..       # Build from the project root so COPY . /app works
+      dockerfile: docker/Dockerfile
+    image: melotts:latest
+    container_name: melotts_ui
+    ports:
+      - "8888:8888"
+    environment:
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped

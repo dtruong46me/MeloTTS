@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "melotts"
+version = "0.1.2"
+description = "Multi-lingual Text-to-Speech library with high-quality voices"
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.9"
+dependencies = [
+    # requirements are listed in requirements.txt for flexibility;
+    # see that file for the full pinned dependency list.
+]
+dynamic = ["dependencies"]
+
+[project.scripts]
+melotts   = "melo.cli.main:main"
+melo      = "melo.cli.main:main"
+melo-ui   = "melo.ui.app:main"
+
+[tool.setuptools]
+packages = { find = {} }
+include-package-data = true
+
+[tool.setuptools.package-data]
+"*" = ["*.txt", "cmudict_*", "*.rep", "*.json", "*.pickle"]
+
+[tool.setuptools.dynamic]
+dependencies = { file = ["requirements.txt"] }
+
+# ---------------------------------------------------------------------------
+# Post-install note (replaces the PostInstallCommand hook from setup.py):
+# After installing, run the following to download the Japanese tokeniser data:
+#
+#   python -m unidic download
+#
+# Or use the provided setup script:
+#
+#   bash melo/scripts/setup_env.sh
+# ---------------------------------------------------------------------------

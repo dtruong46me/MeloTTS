@@ -22,12 +22,12 @@ import torchaudio
 from tqdm import tqdm
 
 # local
-from . import commons
-from . import utils
-from .download_utils import load_or_download_config, load_or_download_model
-from .mel_processing import spectrogram_torch, spectrogram_torch_conv
-from .models import SynthesizerTrn
-from .split_utils import split_sentence
+from .nn import commons
+from .utils import core as utils
+from .utils.download import load_or_download_config, load_or_download_model
+from .audio.mel_processing import spectrogram_torch, spectrogram_torch_conv
+from .nn.models import SynthesizerTrn
+from .utils.split import split_sentence
 
 # ---------------------------------------------------------------------------
 # Constants

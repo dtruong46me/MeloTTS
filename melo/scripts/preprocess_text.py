@@ -35,19 +35,19 @@ import torch
 from tqdm import tqdm
 
 # ---------------------------------------------------------------------------
-# Path setup: allow running this script directly from inside the melo/
-# directory.  Inserts the project root (parent of melo/) onto sys.path so
-# that bare imports like ``from text.cleaner import ...`` resolve correctly.
+# Path setup: scripts/ is now under melo/.  Inserting the project root
+# (3 levels up) onto sys.path makes the ``melo`` package importable when
+# this script is run directly (e.g. ``python melo/scripts/preprocess_text.py``).
 # ---------------------------------------------------------------------------
-__root__ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+__root__ = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 if __root__ not in sys.path:
     sys.path.insert(0, __root__)
 
 # ---------------------------------------------------------------------------
 # local – must come *after* the sys.path fix above
 # ---------------------------------------------------------------------------
-from text.cleaner import clean_text_bert  # noqa: E402
-from text.symbols import num_languages, num_tones, symbols  # noqa: E402
+from melo.text.cleaner import clean_text_bert  # noqa: E402
+from melo.text.symbols import num_languages, num_tones, symbols  # noqa: E402
 
 
 @click.command()

@@ -26,8 +26,8 @@ from torch import nn
 from torch.nn import Conv1d, Conv2d, ConvTranspose1d, functional as F
 from torch.nn.utils import remove_weight_norm, spectral_norm, weight_norm
 
-from melo import attentions, commons, modules
-from melo.commons import get_padding, init_weights
+from . import attentions, commons, modules
+from .commons import get_padding, init_weights
 import melo.monotonic_align as monotonic_align
 
 # ---------------------------------------------------------------------------
