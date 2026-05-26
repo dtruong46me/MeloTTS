@@ -1,21 +1,51 @@
+"""Building-block neural network modules for MeloTTS.
+
+This module provides reusable PyTorch nn.Module components used throughout the
+MeloTTS architecture, including normalisation layers, convolutional blocks,
+WaveNet-style networks, residual blocks, and normalising-flow layers
+(coupling layers, ConvFlow, TransformerCouplingLayer, etc.).
+"""
+
+from __future__ import annotations
+
 import math
+from typing import Optional, Tuple, Union
+
 import torch
 from torch import nn
-from torch.nn import functional as F
-
-from torch.nn import Conv1d
-from torch.nn.utils import weight_norm, remove_weight_norm
+from torch.nn import Conv1d, functional as F
+from torch.nn.utils import remove_weight_norm, weight_norm
 
 from . import commons
-from .commons import init_weights, get_padding
-from .transforms import piecewise_rational_quadratic_transform
 from .attentions import Encoder
+from .commons import get_padding, init_weights
+from .transforms import piecewise_rational_quadratic_transform
 
-LRELU_SLOPE = 0.1
+# Slope used for LeakyReLU activations throughout this module.
+LRELU_SLOPE: float = 0.1
 
 
 class LayerNorm(nn.Module):
-    def __init__(self, channels, eps=1e-5):
+    """Channel-last layer normalisation applied to 1-D sequence tensors.
+
+    Transposes the channel dimension to the last position before calling
+    ``F.layer_norm`` and then transposes back, so the module is compatible
+    with inputs of shape ``[B, C, T]``.
+
+    Attributes:
+        channels: Number of feature channels.
+        eps: Small constant added to the denominator for numerical stability.
+        gamma: Learnable scale parameter of shape ``(channels,)``.
+        beta: Learnable shift parameter of shape ``(channels,)``.
+    """
+
+    def __init__(self, channels: int, eps: float = 1e-5) -> None:
+        """Initialise LayerNorm.
+
+        Args:
+            channels: Number of feature channels.
+            eps: Epsilon for numerical stability in layer normalisation.
+        """
         super().__init__()
         self.channels = channels
         self.eps = eps
@@ -23,22 +53,60 @@ class LayerNorm(nn.Module):
         self.gamma = nn.Parameter(torch.ones(channels))
         self.beta = nn.Parameter(torch.zeros(channels))
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Apply layer normalisation.
+
+        Args:
+            x: Input tensor of shape ``[B, C, T]``.
+
+        Returns:
+            Normalised tensor of the same shape as ``x``.
+        """
         x = x.transpose(1, -1)
         x = F.layer_norm(x, (self.channels,), self.gamma, self.beta, self.eps)
         return x.transpose(1, -1)
 
 
 class ConvReluNorm(nn.Module):
+    """Stack of Conv1d → LayerNorm → ReLU → Dropout layers with a residual projection.
+
+    The first layer maps ``in_channels`` to ``hidden_channels``; subsequent
+    layers keep ``hidden_channels``; a final 1×1 projection maps back to
+    ``out_channels`` and is initialised to zero so the residual starts as an
+    identity transform.
+
+    Attributes:
+        in_channels: Number of input channels.
+        hidden_channels: Number of channels in the intermediate layers.
+        out_channels: Number of output channels.
+        kernel_size: Convolution kernel size.
+        n_layers: Total number of convolutional layers (must be > 1).
+        p_dropout: Dropout probability.
+        conv_layers: List of Conv1d layers.
+        norm_layers: List of LayerNorm layers.
+        relu_drop: Sequential ReLU + Dropout applied after each norm.
+        proj: Final 1×1 projection initialised to zero.
+    """
+
     def __init__(
         self,
-        in_channels,
-        hidden_channels,
-        out_channels,
-        kernel_size,
-        n_layers,
-        p_dropout,
-    ):
+        in_channels: int,
+        hidden_channels: int,
+        out_channels: int,
+        kernel_size: int,
+        n_layers: int,
+        p_dropout: float,
+    ) -> None:
+        """Initialise ConvReluNorm.
+
+        Args:
+            in_channels: Number of input feature channels.
+            hidden_channels: Number of hidden feature channels.
+            out_channels: Number of output feature channels.
+            kernel_size: Convolution kernel size (used with ``padding=kernel_size//2``).
+            n_layers: Number of convolutional layers (must be > 1).
+            p_dropout: Dropout probability applied after each ReLU.
+        """
         super().__init__()
         self.in_channels = in_channels
         self.hidden_channels = hidden_channels
@@ -71,7 +139,16 @@ class ConvReluNorm(nn.Module):
         self.proj.weight.data.zero_()
         self.proj.bias.data.zero_()
 
-    def forward(self, x, x_mask):
+    def forward(self, x: torch.Tensor, x_mask: torch.Tensor) -> torch.Tensor:
+        """Apply the stacked conv-norm-relu layers with a residual projection.
+
+        Args:
+            x: Input tensor of shape ``[B, in_channels, T]``.
+            x_mask: Binary mask of shape ``[B, 1, T]``.
+
+        Returns:
+            Output tensor of shape ``[B, out_channels, T]``, masked by ``x_mask``.
+        """
         x_org = x
         for i in range(self.n_layers):
             x = self.conv_layers[i](x * x_mask)
@@ -82,11 +159,39 @@ class ConvReluNorm(nn.Module):
 
 
 class DDSConv(nn.Module):
-    """
-    Dialted and Depth-Separable Convolution
+    """Dilated and Depth-Separable Convolution stack.
+
+    Each layer applies a dilated depthwise Conv1d followed by a pointwise
+    Conv1d (1×1), with LayerNorm and GELU activations.  Dilation is set to
+    ``kernel_size ** layer_index`` so the receptive field grows exponentially.
+
+    Attributes:
+        channels: Number of feature channels (kept constant throughout).
+        kernel_size: Base kernel size; dilation grows as ``kernel_size**i``.
+        n_layers: Number of stacked layers.
+        p_dropout: Dropout probability.
+        drop: Dropout module.
+        convs_sep: Depthwise (groups=channels) dilated convolutions.
+        convs_1x1: Pointwise convolutions.
+        norms_1: LayerNorm after depthwise conv.
+        norms_2: LayerNorm after pointwise conv.
     """
 
-    def __init__(self, channels, kernel_size, n_layers, p_dropout=0.0):
+    def __init__(
+        self,
+        channels: int,
+        kernel_size: int,
+        n_layers: int,
+        p_dropout: float = 0.0,
+    ) -> None:
+        """Initialise DDSConv.
+
+        Args:
+            channels: Number of feature channels.
+            kernel_size: Base convolution kernel size.
+            n_layers: Number of DDSConv layers.
+            p_dropout: Dropout probability.
+        """
         super().__init__()
         self.channels = channels
         self.kernel_size = kernel_size
@@ -115,7 +220,23 @@ class DDSConv(nn.Module):
             self.norms_1.append(LayerNorm(channels))
             self.norms_2.append(LayerNorm(channels))
 
-    def forward(self, x, x_mask, g=None):
+    def forward(
+        self,
+        x: torch.Tensor,
+        x_mask: torch.Tensor,
+        g: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
+        """Apply the DDSConv stack.
+
+        Args:
+            x: Input tensor of shape ``[B, C, T]``.
+            x_mask: Binary mask of shape ``[B, 1, T]``.
+            g: Optional global conditioning tensor of shape ``[B, C, T]`` (or
+               broadcastable). Added to ``x`` before the main loop.
+
+        Returns:
+            Output tensor of shape ``[B, C, T]``, masked by ``x_mask``.
+        """
         if g is not None:
             x = x + g
         for i in range(self.n_layers):
@@ -131,15 +252,46 @@ class DDSConv(nn.Module):
 
 
 class WN(torch.nn.Module):
+    """WaveNet-style stack of dilated gated convolutions with weight normalisation.
+
+    Each layer uses a gated activation (tanh ⊗ sigmoid) conditioned on an
+    optional global feature ``g``.  Skip connections are accumulated and
+    returned as the output.
+
+    Attributes:
+        hidden_channels: Number of hidden feature channels.
+        kernel_size: Convolution kernel size (stored as a tuple).
+        dilation_rate: Base dilation; layer ``i`` uses ``dilation_rate**i``.
+        n_layers: Number of WaveNet layers.
+        gin_channels: Number of conditioning channels (0 = no conditioning).
+        p_dropout: Dropout probability.
+        in_layers: ModuleList of weight-normed dilated Conv1d layers.
+        res_skip_layers: ModuleList of weight-normed 1×1 Conv1d layers.
+        drop: Dropout module.
+        cond_layer: Optional weight-normed Conv1d for global conditioning.
+    """
+
     def __init__(
         self,
-        hidden_channels,
-        kernel_size,
-        dilation_rate,
-        n_layers,
-        gin_channels=0,
-        p_dropout=0,
-    ):
+        hidden_channels: int,
+        kernel_size: int,
+        dilation_rate: int,
+        n_layers: int,
+        gin_channels: int = 0,
+        p_dropout: int = 0,
+    ) -> None:
+        """Initialise WN (WaveNet-style) module.
+
+        Args:
+            hidden_channels: Number of hidden feature channels.
+            kernel_size: Convolution kernel size (must be odd).
+            dilation_rate: Base dilation factor; layer ``i`` has dilation
+                ``dilation_rate**i``.
+            n_layers: Number of stacked WaveNet layers.
+            gin_channels: Dimension of the global conditioning vector.  Set to
+                0 to disable conditioning.
+            p_dropout: Dropout probability applied after gated activation.
+        """
         super(WN, self).__init__()
         assert kernel_size % 2 == 1
         self.hidden_channels = hidden_channels
@@ -182,7 +334,25 @@ class WN(torch.nn.Module):
             res_skip_layer = torch.nn.utils.weight_norm(res_skip_layer, name="weight")
             self.res_skip_layers.append(res_skip_layer)
 
-    def forward(self, x, x_mask, g=None, **kwargs):
+    def forward(
+        self,
+        x: torch.Tensor,
+        x_mask: torch.Tensor,
+        g: Optional[torch.Tensor] = None,
+        **kwargs,
+    ) -> torch.Tensor:
+        """Run the WaveNet forward pass.
+
+        Args:
+            x: Input tensor of shape ``[B, hidden_channels, T]``.
+            x_mask: Binary mask of shape ``[B, 1, T]``.
+            g: Optional global conditioning tensor of shape
+               ``[B, gin_channels, T']`` (or ``[B, gin_channels, 1]``).
+            **kwargs: Ignored; accepted for API compatibility.
+
+        Returns:
+            Output tensor of shape ``[B, hidden_channels, T]``, masked.
+        """
         output = torch.zeros_like(x)
         n_channels_tensor = torch.IntTensor([self.hidden_channels])
 
@@ -209,17 +379,46 @@ class WN(torch.nn.Module):
                 output = output + res_skip_acts
         return output * x_mask
 
-    def remove_weight_norm(self):
+    def remove_weight_norm(self) -> None:
+        """Remove weight normalisation from all internal Conv1d layers.
+
+        Should be called after training is complete, before inference, to
+        fuse the normalisation into the weight tensors.
+        """
         if self.gin_channels != 0:
             torch.nn.utils.remove_weight_norm(self.cond_layer)
-        for l in self.in_layers:
-            torch.nn.utils.remove_weight_norm(l)
-        for l in self.res_skip_layers:
-            torch.nn.utils.remove_weight_norm(l)
+        for layer in self.in_layers:
+            torch.nn.utils.remove_weight_norm(layer)
+        for layer in self.res_skip_layers:
+            torch.nn.utils.remove_weight_norm(layer)
 
 
 class ResBlock1(torch.nn.Module):
-    def __init__(self, channels, kernel_size=3, dilation=(1, 3, 5)):
+    """Residual block with multi-dilation Conv1d pairs (variant 1).
+
+    Uses two parallel sets of three dilated Conv1d layers (``convs1`` and
+    ``convs2``).  Each pair applies LeakyReLU, optional masking, and two
+    convolutions with a residual connection.  All convolutions are
+    weight-normalised.
+
+    Attributes:
+        convs1: ModuleList of weight-normed Conv1d with varying dilation.
+        convs2: ModuleList of weight-normed Conv1d with dilation=1.
+    """
+
+    def __init__(
+        self,
+        channels: int,
+        kernel_size: int = 3,
+        dilation: Tuple[int, int, int] = (1, 3, 5),
+    ) -> None:
+        """Initialise ResBlock1.
+
+        Args:
+            channels: Number of input and output channels.
+            kernel_size: Convolution kernel size.
+            dilation: Tuple of three dilation values for the first conv set.
+        """
         super(ResBlock1, self).__init__()
         self.convs1 = nn.ModuleList(
             [
@@ -293,7 +492,20 @@ class ResBlock1(torch.nn.Module):
         )
         self.convs2.apply(init_weights)
 
-    def forward(self, x, x_mask=None):
+    def forward(
+        self,
+        x: torch.Tensor,
+        x_mask: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
+        """Apply the residual block.
+
+        Args:
+            x: Input tensor of shape ``[B, C, T]``.
+            x_mask: Optional binary mask of shape ``[B, 1, T]``.
+
+        Returns:
+            Output tensor of the same shape as ``x``.
+        """
         for c1, c2 in zip(self.convs1, self.convs2):
             xt = F.leaky_relu(x, LRELU_SLOPE)
             if x_mask is not None:
@@ -308,15 +520,37 @@ class ResBlock1(torch.nn.Module):
             x = x * x_mask
         return x
 
-    def remove_weight_norm(self):
-        for l in self.convs1:
-            remove_weight_norm(l)
-        for l in self.convs2:
-            remove_weight_norm(l)
+    def remove_weight_norm(self) -> None:
+        """Remove weight normalisation from all Conv1d layers in this block."""
+        for layer in self.convs1:
+            remove_weight_norm(layer)
+        for layer in self.convs2:
+            remove_weight_norm(layer)
 
 
 class ResBlock2(torch.nn.Module):
-    def __init__(self, channels, kernel_size=3, dilation=(1, 3)):
+    """Residual block with two dilated Conv1d layers (variant 2).
+
+    Lighter than :class:`ResBlock1`; uses a single list of two convolutions
+    with different dilation values.  All convolutions are weight-normalised.
+
+    Attributes:
+        convs: ModuleList of two weight-normed Conv1d layers.
+    """
+
+    def __init__(
+        self,
+        channels: int,
+        kernel_size: int = 3,
+        dilation: Tuple[int, int] = (1, 3),
+    ) -> None:
+        """Initialise ResBlock2.
+
+        Args:
+            channels: Number of input and output channels.
+            kernel_size: Convolution kernel size.
+            dilation: Tuple of two dilation values.
+        """
         super(ResBlock2, self).__init__()
         self.convs = nn.ModuleList(
             [
@@ -344,7 +578,20 @@ class ResBlock2(torch.nn.Module):
         )
         self.convs.apply(init_weights)
 
-    def forward(self, x, x_mask=None):
+    def forward(
+        self,
+        x: torch.Tensor,
+        x_mask: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
+        """Apply the residual block.
+
+        Args:
+            x: Input tensor of shape ``[B, C, T]``.
+            x_mask: Optional binary mask of shape ``[B, 1, T]``.
+
+        Returns:
+            Output tensor of the same shape as ``x``.
+        """
         for c in self.convs:
             xt = F.leaky_relu(x, LRELU_SLOPE)
             if x_mask is not None:
@@ -355,13 +602,44 @@ class ResBlock2(torch.nn.Module):
             x = x * x_mask
         return x
 
-    def remove_weight_norm(self):
-        for l in self.convs:
-            remove_weight_norm(l)
+    def remove_weight_norm(self) -> None:
+        """Remove weight normalisation from all Conv1d layers in this block."""
+        for layer in self.convs:
+            remove_weight_norm(layer)
 
 
 class Log(nn.Module):
-    def forward(self, x, x_mask, reverse=False, **kwargs):
+    """Log-transform flow layer.
+
+    In the forward direction computes ``y = log(clamp(x, min=1e-5))`` and
+    returns the log-determinant.  In the reverse direction computes
+    ``x = exp(y)``.
+
+    This is a parameter-free bijection used inside normalising-flow chains.
+    """
+
+    def forward(
+        self,
+        x: torch.Tensor,
+        x_mask: torch.Tensor,
+        reverse: bool = False,
+        **kwargs,
+    ) -> Union[Tuple[torch.Tensor, torch.Tensor], torch.Tensor]:
+        """Apply the log (forward) or exp (reverse) transform.
+
+        Args:
+            x: Input tensor of shape ``[B, C, T]``.
+            x_mask: Binary mask of shape ``[B, 1, T]``.
+            reverse: If ``False`` (default) apply the forward (log) transform
+                and return ``(y, logdet)``.  If ``True`` apply the inverse
+                (exp) transform and return ``x``.
+            **kwargs: Ignored; accepted for API compatibility.
+
+        Returns:
+            In forward mode: a tuple ``(y, logdet)`` where ``y`` has the same
+            shape as ``x`` and ``logdet`` is a scalar per sample.
+            In reverse mode: the reconstructed ``x`` tensor.
+        """
         if not reverse:
             y = torch.log(torch.clamp_min(x, 1e-5)) * x_mask
             logdet = torch.sum(-y, [1, 2])
@@ -372,7 +650,36 @@ class Log(nn.Module):
 
 
 class Flip(nn.Module):
-    def forward(self, x, *args, reverse=False, **kwargs):
+    """Channel-flip flow layer.
+
+    Reverses the channel dimension (``torch.flip(x, [1])``).  This is a
+    parameter-free involution (its own inverse), so both the forward and
+    reverse passes perform the same operation.  In the forward direction a
+    zero log-determinant is also returned.
+    """
+
+    def forward(
+        self,
+        x: torch.Tensor,
+        *args,
+        reverse: bool = False,
+        **kwargs,
+    ) -> Union[Tuple[torch.Tensor, torch.Tensor], torch.Tensor]:
+        """Flip channels and optionally return the log-determinant.
+
+        Args:
+            x: Input tensor of shape ``[B, C, T]``.
+            *args: Ignored positional arguments.
+            reverse: If ``False`` (default) return ``(x_flipped, logdet)``
+                where ``logdet`` is all zeros.  If ``True`` return only the
+                flipped tensor.
+            **kwargs: Ignored keyword arguments.
+
+        Returns:
+            In forward mode: ``(x_flipped, logdet)`` — a zero log-determinant
+            tensor of shape ``[B]``.
+            In reverse mode: ``x_flipped``.
+        """
         x = torch.flip(x, [1])
         if not reverse:
             logdet = torch.zeros(x.size(0)).to(dtype=x.dtype, device=x.device)
@@ -382,13 +689,50 @@ class Flip(nn.Module):
 
 
 class ElementwiseAffine(nn.Module):
-    def __init__(self, channels):
+    """Learnable element-wise affine flow layer.
+
+    Applies the transformation ``y = m + exp(logs) * x`` in the forward
+    direction and ``x = (y - m) * exp(-logs)`` in the reverse direction.
+    Both ``m`` and ``logs`` are learnable parameters.
+
+    Attributes:
+        channels: Number of feature channels.
+        m: Learnable shift parameter of shape ``(channels, 1)``.
+        logs: Learnable log-scale parameter of shape ``(channels, 1)``.
+    """
+
+    def __init__(self, channels: int) -> None:
+        """Initialise ElementwiseAffine.
+
+        Args:
+            channels: Number of feature channels.
+        """
         super().__init__()
         self.channels = channels
         self.m = nn.Parameter(torch.zeros(channels, 1))
         self.logs = nn.Parameter(torch.zeros(channels, 1))
 
-    def forward(self, x, x_mask, reverse=False, **kwargs):
+    def forward(
+        self,
+        x: torch.Tensor,
+        x_mask: torch.Tensor,
+        reverse: bool = False,
+        **kwargs,
+    ) -> Union[Tuple[torch.Tensor, torch.Tensor], torch.Tensor]:
+        """Apply element-wise affine transform.
+
+        Args:
+            x: Input tensor of shape ``[B, channels, T]``.
+            x_mask: Binary mask of shape ``[B, 1, T]``.
+            reverse: If ``False`` (default) apply forward transform and return
+                ``(y, logdet)``.  If ``True`` apply inverse and return ``x``.
+            **kwargs: Ignored.
+
+        Returns:
+            In forward mode: ``(y, logdet)`` where ``logdet`` is a scalar
+            per sample.
+            In reverse mode: the reconstructed ``x`` tensor.
+        """
         if not reverse:
             y = self.m + torch.exp(self.logs) * x
             y = y * x_mask
@@ -400,17 +744,49 @@ class ElementwiseAffine(nn.Module):
 
 
 class ResidualCouplingLayer(nn.Module):
+    """Affine coupling layer for normalising flows using a WaveNet encoder.
+
+    Splits the input into two halves along the channel axis.  The first half
+    is encoded by a WN network to produce mean (and optionally log-scale)
+    parameters, which are applied to the second half.
+
+    Attributes:
+        channels: Total number of channels (must be even).
+        hidden_channels: Hidden channels in the WN encoder.
+        kernel_size: Kernel size for the WN convolutions.
+        dilation_rate: Dilation rate for the WN convolutions.
+        n_layers: Number of WN layers.
+        half_channels: ``channels // 2``.
+        mean_only: If ``True`` only predict the mean (log-scale is zero).
+        pre: 1×1 Conv1d projecting the first half to ``hidden_channels``.
+        enc: WN encoder network.
+        post: 1×1 Conv1d projecting to the mean/log-scale output.
+    """
+
     def __init__(
         self,
-        channels,
-        hidden_channels,
-        kernel_size,
-        dilation_rate,
-        n_layers,
-        p_dropout=0,
-        gin_channels=0,
-        mean_only=False,
-    ):
+        channels: int,
+        hidden_channels: int,
+        kernel_size: int,
+        dilation_rate: int,
+        n_layers: int,
+        p_dropout: float = 0,
+        gin_channels: int = 0,
+        mean_only: bool = False,
+    ) -> None:
+        """Initialise ResidualCouplingLayer.
+
+        Args:
+            channels: Total channel count (must be divisible by 2).
+            hidden_channels: Number of channels in the WN encoder.
+            kernel_size: Kernel size for WN dilated convolutions.
+            dilation_rate: Dilation rate base for WN layers.
+            n_layers: Number of layers in the WN encoder.
+            p_dropout: Dropout probability for the WN encoder.
+            gin_channels: Conditioning channel size (0 = none).
+            mean_only: If ``True`` predict only the mean; log-scale is fixed
+                to zero (volume-preserving flow).
+        """
         assert channels % 2 == 0, "channels should be divisible by 2"
         super().__init__()
         self.channels = channels
@@ -434,7 +810,28 @@ class ResidualCouplingLayer(nn.Module):
         self.post.weight.data.zero_()
         self.post.bias.data.zero_()
 
-    def forward(self, x, x_mask, g=None, reverse=False):
+    def forward(
+        self,
+        x: torch.Tensor,
+        x_mask: torch.Tensor,
+        g: Optional[torch.Tensor] = None,
+        reverse: bool = False,
+    ) -> Union[Tuple[torch.Tensor, torch.Tensor], torch.Tensor]:
+        """Apply the residual coupling layer.
+
+        Args:
+            x: Input tensor of shape ``[B, channels, T]``.
+            x_mask: Binary mask of shape ``[B, 1, T]``.
+            g: Optional global conditioning tensor.
+            reverse: If ``False`` (default) apply the forward coupling and
+                return ``(x_out, logdet)``.  If ``True`` apply the inverse
+                and return ``x_out``.
+
+        Returns:
+            In forward mode: ``(x_out, logdet)`` where ``logdet`` is scalar
+            per sample.
+            In reverse mode: reconstructed input tensor.
+        """
         x0, x1 = torch.split(x, [self.half_channels] * 2, 1)
         h = self.pre(x0) * x_mask
         h = self.enc(h, x_mask, g=g)
@@ -457,15 +854,44 @@ class ResidualCouplingLayer(nn.Module):
 
 
 class ConvFlow(nn.Module):
+    """Coupling flow using a piecewise rational quadratic spline transform.
+
+    The first half of the channels is encoded by a :class:`DDSConv` network
+    to produce spline knot parameters, which are applied to the second half
+    via a piecewise rational quadratic transform.
+
+    Attributes:
+        in_channels: Total number of input channels.
+        filter_channels: Number of channels in the DDSConv encoder.
+        kernel_size: Kernel size for the DDSConv encoder.
+        n_layers: Number of DDSConv layers.
+        num_bins: Number of spline bins.
+        tail_bound: Boundary of the spline tails.
+        half_channels: ``in_channels // 2``.
+        pre: 1×1 Conv1d projecting the first half to ``filter_channels``.
+        convs: DDSConv encoder.
+        proj: 1×1 Conv1d projecting to knot parameters.
+    """
+
     def __init__(
         self,
-        in_channels,
-        filter_channels,
-        kernel_size,
-        n_layers,
-        num_bins=10,
-        tail_bound=5.0,
-    ):
+        in_channels: int,
+        filter_channels: int,
+        kernel_size: int,
+        n_layers: int,
+        num_bins: int = 10,
+        tail_bound: float = 5.0,
+    ) -> None:
+        """Initialise ConvFlow.
+
+        Args:
+            in_channels: Total number of input channels (must be even).
+            filter_channels: Number of channels in the internal DDSConv.
+            kernel_size: Kernel size for DDSConv.
+            n_layers: Number of DDSConv layers.
+            num_bins: Number of rational quadratic spline bins.
+            tail_bound: Boundary value for the linear tails of the spline.
+        """
         super().__init__()
         self.in_channels = in_channels
         self.filter_channels = filter_channels
@@ -483,7 +909,27 @@ class ConvFlow(nn.Module):
         self.proj.weight.data.zero_()
         self.proj.bias.data.zero_()
 
-    def forward(self, x, x_mask, g=None, reverse=False):
+    def forward(
+        self,
+        x: torch.Tensor,
+        x_mask: torch.Tensor,
+        g: Optional[torch.Tensor] = None,
+        reverse: bool = False,
+    ) -> Union[Tuple[torch.Tensor, torch.Tensor], torch.Tensor]:
+        """Apply the convolutional spline flow.
+
+        Args:
+            x: Input tensor of shape ``[B, in_channels, T]``.
+            x_mask: Binary mask of shape ``[B, 1, T]``.
+            g: Optional global conditioning tensor passed to DDSConv.
+            reverse: If ``False`` (default) apply forward transform and return
+                ``(x_out, logdet)``.  If ``True`` apply inverse and return
+                ``x_out``.
+
+        Returns:
+            In forward mode: ``(x_out, logdet)``.
+            In reverse mode: ``x_out``.
+        """
         x0, x1 = torch.split(x, [self.half_channels] * 2, 1)
         h = self.pre(x0)
         h = self.convs(h, x_mask, g=g)
@@ -517,19 +963,52 @@ class ConvFlow(nn.Module):
 
 
 class TransformerCouplingLayer(nn.Module):
+    """Affine coupling layer using a Transformer encoder instead of WaveNet.
+
+    Structurally identical to :class:`ResidualCouplingLayer` but replaces the
+    WN encoder with an :class:`~melo.attentions.Encoder` (Transformer FFT
+    block).  Supports parameter sharing via ``wn_sharing_parameter``.
+
+    Attributes:
+        channels: Total number of channels (must be even).
+        hidden_channels: Hidden channels in the Transformer encoder.
+        kernel_size: Kernel size for the Transformer feed-forward network.
+        n_layers: Number of Transformer layers (must be 3).
+        half_channels: ``channels // 2``.
+        mean_only: If ``True`` only predict the mean (log-scale is zero).
+        pre: 1×1 Conv1d projecting the first half to ``hidden_channels``.
+        enc: Transformer Encoder (or shared parameter reference).
+        post: 1×1 Conv1d projecting to mean/log-scale output.
+    """
+
     def __init__(
         self,
-        channels,
-        hidden_channels,
-        kernel_size,
-        n_layers,
-        n_heads,
-        p_dropout=0,
-        filter_channels=0,
-        mean_only=False,
-        wn_sharing_parameter=None,
-        gin_channels=0,
-    ):
+        channels: int,
+        hidden_channels: int,
+        kernel_size: int,
+        n_layers: int,
+        n_heads: int,
+        p_dropout: float = 0,
+        filter_channels: int = 0,
+        mean_only: bool = False,
+        wn_sharing_parameter: Optional[nn.Module] = None,
+        gin_channels: int = 0,
+    ) -> None:
+        """Initialise TransformerCouplingLayer.
+
+        Args:
+            channels: Total channel count (must be divisible by 2).
+            hidden_channels: Number of hidden channels in the Transformer encoder.
+            kernel_size: Kernel size for the Transformer FFT feed-forward layers.
+            n_layers: Number of Transformer layers (must equal 3).
+            n_heads: Number of attention heads.
+            p_dropout: Dropout probability.
+            filter_channels: Feed-forward filter channel count for the Transformer.
+            mean_only: If ``True`` predict only the mean (volume-preserving).
+            wn_sharing_parameter: If not ``None``, this encoder module is reused
+                instead of creating a new one (parameter sharing across layers).
+            gin_channels: Global conditioning channel size (0 = none).
+        """
         assert n_layers == 3, n_layers
         assert channels % 2 == 0, "channels should be divisible by 2"
         super().__init__()
@@ -559,7 +1038,28 @@ class TransformerCouplingLayer(nn.Module):
         self.post.weight.data.zero_()
         self.post.bias.data.zero_()
 
-    def forward(self, x, x_mask, g=None, reverse=False):
+    def forward(
+        self,
+        x: torch.Tensor,
+        x_mask: torch.Tensor,
+        g: Optional[torch.Tensor] = None,
+        reverse: bool = False,
+    ) -> Union[Tuple[torch.Tensor, torch.Tensor], torch.Tensor]:
+        """Apply the Transformer coupling layer.
+
+        Args:
+            x: Input tensor of shape ``[B, channels, T]``.
+            x_mask: Binary mask of shape ``[B, 1, T]``.
+            g: Optional global conditioning tensor.
+            reverse: If ``False`` (default) apply forward coupling and return
+                ``(x_out, logdet)``.  If ``True`` apply inverse and return
+                ``x_out``.
+
+        Returns:
+            In forward mode: ``(x_out, logdet)`` where ``logdet`` is scalar
+            per sample.
+            In reverse mode: reconstructed input tensor.
+        """
         x0, x1 = torch.split(x, [self.half_channels] * 2, 1)
         h = self.pre(x0) * x_mask
         h = self.enc(h, x_mask, g=g)
@@ -580,6 +1080,7 @@ class TransformerCouplingLayer(nn.Module):
             x = torch.cat([x0, x1], 1)
             return x
 
+        # NOTE: unreachable code below - kept for reference
         x1, logabsdet = piecewise_rational_quadratic_transform(
             x1,
             unnormalized_widths,
