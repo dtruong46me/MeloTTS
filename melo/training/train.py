@@ -95,10 +95,7 @@ def run():
             drop_last=False,
             collate_fn=collate_fn,
         )
-    if (
-        "use_noise_scaled_mas" in hps.model.keys()
-        and hps.model.use_noise_scaled_mas is True
-    ):
+    if hps.model.use_noise_scaled_mas:
         print("Using noise scaled MAS for VITS2")
         mas_noise_scale_initial = 0.01
         noise_scale_delta = 2e-6
@@ -106,10 +103,7 @@ def run():
         print("Using normal MAS for VITS1")
         mas_noise_scale_initial = 0.0
         noise_scale_delta = 0.0
-    if (
-        "use_duration_discriminator" in hps.model.keys()
-        and hps.model.use_duration_discriminator is True
-    ):
+    if hps.model.use_duration_discriminator:
         print("Using duration discriminator for VITS2")
         net_dur_disc = DurationDiscriminator(
             hps.model.hidden_channels,
@@ -118,10 +112,9 @@ def run():
             0.1,
             gin_channels=hps.model.gin_channels if hps.data.n_speakers != 0 else 0,
         ).cuda(rank)
-    if (
-        "use_spk_conditioned_encoder" in hps.model.keys()
-        and hps.model.use_spk_conditioned_encoder is True
-    ):
+    else:
+        net_dur_disc = None
+    if getattr(hps.model, "use_spk_conditioned_encoder", False):
         if hps.data.n_speakers == 0:
             raise ValueError(
                 "n_speakers must be > 0 when using spk conditioned encoder to train multi-speaker model"
@@ -136,7 +129,7 @@ def run():
         n_speakers=hps.data.n_speakers,
         mas_noise_scale_initial=mas_noise_scale_initial,
         noise_scale_delta=noise_scale_delta,
-        **hps.model,
+        **hps.model.model_dump(),
     ).cuda(rank)
 
     net_d = MultiPeriodDiscriminator(hps.model.use_spectral_norm).cuda(rank)

@@ -98,7 +98,7 @@ class TTS(nn.Module):
             n_speakers=hps.data.n_speakers,
             num_tones=num_tones,
             num_languages=num_languages,
-            **hps.model,
+            **hps.model.model_dump(),
         ).to(device)
 
         model.eval()

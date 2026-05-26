@@ -39,6 +39,7 @@ from melo.nn import commons
 from melo.text import cleaned_text_to_sequence
 from melo.text import get_bert
 from melo.text.cleaner import clean_text
+from melo.utils.config import ConfigSchema
 
 
 # Flag to track whether matplotlib has been initialized with the Agg backend
@@ -55,7 +56,7 @@ logger = logging.getLogger(__name__)
 def get_text_for_tts_infer(
     text: str,
     language_str: str,
-    hps: "HParams",
+    hps: ConfigSchema,
     device: str,
     symbol_to_id: Optional[Dict[str, int]] = None,
 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
@@ -483,19 +484,19 @@ def load_filepaths_and_text(
 # ---------------------------------------------------------------------------
 
 
-def get_hparams(init: bool = True) -> "HParams":
+def get_hparams(init: bool = True) -> ConfigSchema:
     """Parse command-line arguments and build a hyperparameter object.
 
     Reads a JSON config file specified via ``--config``, copies it to the
     model directory, and attaches extra CLI arguments (pretrain paths, port,
-    etc.) as attributes on the returned ``HParams`` instance.
+    etc.) as attributes on the returned ``ConfigSchema`` instance.
 
     Args:
         init: If ``True``, copy the source config to ``logs/<model>/config.json``.
               If ``False``, read the config directly from the model directory.
 
     Returns:
-        An ``HParams`` instance populated from the JSON config and CLI args,
+        A ``ConfigSchema`` instance populated from the JSON config and CLI args,
         with ``model_dir``, ``pretrain_G``, ``pretrain_D``, ``pretrain_dur``,
         and ``port`` attributes attached.
     """
@@ -532,7 +533,7 @@ def get_hparams(init: bool = True) -> "HParams":
             data = f.read()
     config = json.loads(data)
 
-    hparams = HParams(**config)
+    hparams = ConfigSchema(**config)
     hparams.model_dir = model_dir
     hparams.pretrain_G = args.pretrain_G
     hparams.pretrain_D = args.pretrain_D
@@ -595,41 +596,42 @@ def clean_checkpoints(
     [del_routine(fn) for fn in to_del]
 
 
-def get_hparams_from_dir(model_dir: str) -> "HParams":
+def get_hparams_from_dir(model_dir: str) -> ConfigSchema:
     """Load hyperparameters from a ``config.json`` file inside *model_dir*.
 
     Args:
         model_dir: Path to the model directory that contains ``config.json``.
 
     Returns:
-        An ``HParams`` instance with ``model_dir`` set to the given directory.
+        A ``ConfigSchema`` instance with ``model_dir`` set to the given directory.
     """
     config_save_path = os.path.join(model_dir, "config.json")
     with open(config_save_path, "r", encoding="utf-8") as f:
         data = f.read()
     config = json.loads(data)
 
-    hparams = HParams(**config)
+    hparams = ConfigSchema(**config)
     hparams.model_dir = model_dir
     return hparams
 
 
-def get_hparams_from_file(config_path: str) -> "HParams":
+def get_hparams_from_file(config_path: str) -> ConfigSchema:
     """Load hyperparameters directly from a JSON config file.
 
     Args:
         config_path: Path to the JSON configuration file.
 
     Returns:
-        An ``HParams`` instance populated from the JSON file.
+        A ``ConfigSchema`` instance populated from the JSON file.
     """
     with open(config_path, "r", encoding="utf-8") as f:
         data = f.read()
     config = json.loads(data)
 
-    hparams = HParams(**config)
+    hparams = ConfigSchema(**config)
     return hparams
 
+import subprocess
 
 # ---------------------------------------------------------------------------
 # Git / logging helpers
@@ -637,16 +639,7 @@ def get_hparams_from_file(config_path: str) -> "HParams":
 
 
 def check_git_hash(model_dir: str) -> None:
-    """Compare the current git commit hash with the one saved in *model_dir*.
-
-    If the source directory is not a git repository, a warning is logged and
-    the function returns immediately. If a hash file already exists in
-    *model_dir* and it differs from the current HEAD, a warning is logged.
-    Otherwise the current hash is written to ``<model_dir>/githash``.
-
-    Args:
-        model_dir: Directory where the ``githash`` file is read from / written to.
-    """
+    """Compare the current git commit hash with the one saved in *model_dir*."""
     source_dir = os.path.dirname(os.path.realpath(__file__))
     if not os.path.exists(os.path.join(source_dir, ".git")):
         logger.warn(
@@ -672,19 +665,7 @@ def check_git_hash(model_dir: str) -> None:
 
 
 def get_logger(model_dir: str, filename: str = "train.log") -> logging.Logger:
-    """Create (or reconfigure) the module-level logger to also write to a file.
-
-    Sets up a ``DEBUG``-level ``FileHandler`` with a timestamped formatter and
-    attaches it to a logger named after the basename of *model_dir*.
-
-    Args:
-        model_dir: Directory where the log file will be created. The directory
-            is created if it does not already exist.
-        filename: Name of the log file (default ``"train.log"``).
-
-    Returns:
-        The configured ``logging.Logger`` instance.
-    """
+    """Create (or reconfigure) the module-level logger to also write to a file."""
     global logger
     logger = logging.getLogger(os.path.basename(model_dir))
     logger.setLevel(logging.DEBUG)
@@ -697,79 +678,3 @@ def get_logger(model_dir: str, filename: str = "train.log") -> logging.Logger:
     h.setFormatter(formatter)
     logger.addHandler(h)
     return logger
-
-
-# ---------------------------------------------------------------------------
-# HParams class
-# ---------------------------------------------------------------------------
-
-
-class HParams:
-    """Nested hyperparameter container backed by ``__dict__``.
-
-    Supports attribute-style and dict-style access. Nested ``dict`` values are
-    automatically converted to ``HParams`` instances, enabling dot-access for
-    deeply nested configs (e.g. ``hps.data.sampling_rate``).
-
-    Attributes:
-        (dynamic): All key-value pairs passed to ``__init__`` become attributes.
-            Dict values are recursively converted to ``HParams`` objects.
-
-    Example:
-        >>> hps = HParams(data={"sampling_rate": 22050}, train={"batch_size": 32})
-        >>> hps.data.sampling_rate
-        22050
-        >>> hps["train"].batch_size
-        32
-    """
-
-    def __init__(self, **kwargs) -> None:
-        """Initialise HParams from keyword arguments.
-
-        Args:
-            **kwargs: Arbitrary keyword arguments. Values that are plain
-                ``dict`` instances are recursively wrapped in ``HParams``.
-        """
-        for k, v in kwargs.items():
-            if type(v) == dict:
-                v = HParams(**v)
-            self[k] = v
-
-    def keys(self):
-        """Return the attribute names of this HParams instance.
-
-        Returns:
-            A view of the underlying ``__dict__`` keys.
-        """
-        return self.__dict__.keys()
-
-    def items(self):
-        """Return ``(key, value)`` pairs of this HParams instance.
-
-        Returns:
-            A view of the underlying ``__dict__`` items.
-        """
-        return self.__dict__.items()
-
-    def values(self):
-        """Return the attribute values of this HParams instance.
-
-        Returns:
-            A view of the underlying ``__dict__`` values.
-        """
-        return self.__dict__.values()
-
-    def __len__(self) -> int:
-        return len(self.__dict__)
-
-    def __getitem__(self, key: str):
-        return getattr(self, key)
-
-    def __setitem__(self, key: str, value) -> None:
-        return setattr(self, key, value)
-
-    def __contains__(self, key: str) -> bool:
-        return key in self.__dict__
-
-    def __repr__(self) -> str:
-        return self.__dict__.__repr__()
