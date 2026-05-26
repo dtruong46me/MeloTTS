@@ -1,3 +1,9 @@
+"""Module for processing and normalizing Korean text.
+
+This module provides functions to convert Korean text to phonemes and extract
+BERT features, making it compatible with Text-To-Speech systems.
+"""
+
 # Convert Japanese text to phonemes which is
 # compatible with Julius https://github.com/julius-speech/segmentation-kit
 import re
@@ -13,7 +19,16 @@ from melo.text.ko_dictionary import english_dictionary, etc_dictionary
 from anyascii import anyascii
 from jamo import hangul_to_jamo
 
-def normalize(text):
+
+def normalize(text: str) -> str:
+    """Normalize the Korean text.
+
+    Args:
+        text (str): The input text to normalize.
+
+    Returns:
+        str: The normalized text.
+    """
     text = text.strip()
     text = re.sub("[⺀-⺙⺛-⻳⼀-⿕々〇〡-〩〸-〺〻㐀-䶵一-鿃豈-鶴侮-頻並-龎]", "", text)
     text = normalize_with_dictionary(text, etc_dictionary)
@@ -22,14 +37,32 @@ def normalize(text):
     return text
 
 
-def normalize_with_dictionary(text, dic):
+def normalize_with_dictionary(text: str, dic: dict[str, str]) -> str:
+    """Normalize text using a given dictionary.
+
+    Args:
+        text (str): The input text.
+        dic (dict[str, str]): A dictionary containing target words as keys
+            and their replacements as values.
+
+    Returns:
+        str: The text after dictionary replacements.
+    """
     if any(key in text for key in dic.keys()):
         pattern = re.compile("|".join(re.escape(key) for key in dic.keys()))
         return pattern.sub(lambda x: dic[x.group()], text)
     return text
 
 
-def normalize_english(text):
+def normalize_english(text: str) -> str:
+    """Normalize English words in the text to Korean pronunciations.
+
+    Args:
+        text (str): The input text containing English words.
+
+    Returns:
+        str: The text with English words normalized.
+    """
     def fn(m):
         word = m.group()
         if word in english_dictionary:
@@ -41,8 +74,8 @@ def normalize_english(text):
 
 
 g2p_kr = None
-def korean_text_to_phonemes(text, character: str = "hangeul") -> str:
-    """
+def korean_text_to_phonemes(text: str, character: str = "hangeul") -> str:
+    """Convert Korean text to phonemes.
 
     The input and output values look the same, but they are different in Unicode.
 
@@ -51,6 +84,13 @@ def korean_text_to_phonemes(text, character: str = "hangeul") -> str:
         input = '하늘' (Unicode : \ud558\ub298), (하 + 늘)
         output = '하늘' (Unicode :\u1112\u1161\u1102\u1173\u11af), (ᄒ + ᅡ + ᄂ + ᅳ + ᆯ)
 
+    Args:
+        text (str): The Korean text to convert.
+        character (str, optional): The character format ('hangeul' or 'english').
+            Defaults to "hangeul".
+
+    Returns:
+        str: The converted phonemes as a string.
     """
     global g2p_kr  # pylint: disable=global-statement
     if g2p_kr is None:
@@ -70,7 +110,15 @@ def korean_text_to_phonemes(text, character: str = "hangeul") -> str:
     text = list(hangul_to_jamo(text))  # '하늘' --> ['ᄒ', 'ᅡ', 'ᄂ', 'ᅳ', 'ᆯ']
     return "".join(text)
 
-def text_normalize(text):
+def text_normalize(text: str) -> str:
+    """Normalize Korean text.
+
+    Args:
+        text (str): The input text.
+
+    Returns:
+        str: The normalized text.
+    """
     # res = unicodedata.normalize("NFKC", text)
     # res = japanese_convert_numbers_to_words(res)
     # # res = "".join([i for i in res if is_japanese_character(i)])
@@ -79,7 +127,16 @@ def text_normalize(text):
     return text
 
 
-def distribute_phone(n_phone, n_word):
+def distribute_phone(n_phone: int, n_word: int) -> list[int]:
+    """Distribute phonemes evenly among words.
+
+    Args:
+        n_phone (int): The total number of phonemes.
+        n_word (int): The total number of words.
+
+    Returns:
+        list[int]: A list representing the distribution of phonemes per word.
+    """
     phones_per_word = [0] * n_word
     for task in range(n_phone):
         min_tasks = min(phones_per_word)
@@ -94,7 +151,16 @@ def distribute_phone(n_phone, n_word):
 model_id = 'kykim/bert-kor-base'
 tokenizer = AutoTokenizer.from_pretrained(model_id)
 
-def g2p(norm_text):
+def g2p(norm_text: str) -> tuple[list[str], list[int], list[int]]:
+    """Convert normalized Korean text to phonemes, tones, and word-to-phoneme mappings.
+
+    Args:
+        norm_text (str): The normalized text.
+
+    Returns:
+        tuple[list[str], list[int], list[int]]: A tuple containing a list of phonemes,
+            a list of tones, and a list of word-to-phoneme mappings.
+    """
     tokenized = tokenizer.tokenize(norm_text)
     phs = []
     ph_groups = []
@@ -138,7 +204,17 @@ def g2p(norm_text):
     assert len(word2ph) == len(tokenized) + 2
     return phones, tones, word2ph
 
-def get_bert_feature(text, word2ph, device='cuda'):
+def get_bert_feature(text: str, word2ph: list[int], device: str = 'cuda') -> "torch.Tensor":
+    """Extract BERT features for the given Korean text.
+
+    Args:
+        text (str): The input text.
+        word2ph (list[int]): A list mapping words to phoneme counts.
+        device (str, optional): The device to run the model on. Defaults to 'cuda'.
+
+    Returns:
+        torch.Tensor: The extracted BERT features at the phoneme level.
+    """
     from . import japanese_bert
     return japanese_bert.get_bert_feature(text, word2ph, device=device, model_id=model_id)
 

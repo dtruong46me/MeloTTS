@@ -21,7 +21,7 @@ import json
 import logging
 import os
 import subprocess
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 # ---------------------------------------------------------------------------
 # Third-party
@@ -255,7 +255,7 @@ def save_checkpoint(
 
 
 def summarize(
-    writer,
+    writer: Any,
     global_step: int,
     scalars: Dict = {},
     histograms: Dict = {},

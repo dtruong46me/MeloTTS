@@ -3,7 +3,7 @@
 This module provides high-level helpers that normalise raw input text, apply
 grapheme-to-phoneme (G2P) conversion, and optionally extract BERT features —
 all dispatched through a language-keyed module map so that adding a new
-language requires only a single entry in ``language_module_map``.
+language requires only a single entry in language_module_map.
 """
 
 from __future__ import annotations
@@ -20,8 +20,8 @@ from . import cleaned_text_to_sequence
 # Maps language code strings to their corresponding language-processing modules.
 # Each module is expected to expose at minimum:
 #   - text_normalize(text: str) -> str
-#   - g2p(norm_text: str) -> (phones, tones, word2ph)
-#   - get_bert_feature(norm_text, word2ph, device) -> torch.Tensor
+#   - g2p(norm_text: str) -> tuple[list[str], list[int], list[int]]
+#   - get_bert_feature(norm_text: str, word2ph: list[int], device: str) -> torch.Tensor
 # Note: both 'SP' and 'ES' map to the Spanish module.
 language_module_map = {
     "ZH": chinese,
@@ -35,23 +35,19 @@ language_module_map = {
 }
 
 
-def clean_text(
-    text: str,
-    language: str,
-) -> tuple[str, list[str], list[int], list[int]]:
+def clean_text(text: str, language: str) -> tuple[str, list[str], list[int], list[int]]:
     """Normalise text and run grapheme-to-phoneme conversion.
 
     Args:
-        text: Raw input text string.
-        language: Language code (e.g. ``"ZH"``, ``"EN"``).
+        text (str): Raw input text string.
+        language (str): Language code (e.g., "ZH", "EN").
 
     Returns:
-        A 4-tuple ``(norm_text, phones, tones, word2ph)`` where:
-
-        * **norm_text** – language-normalised text.
-        * **phones** – list of phoneme symbol strings.
-        * **tones** – list of tone integers, one per phoneme.
-        * **word2ph** – list mapping each word to its phoneme count.
+        tuple[str, list[str], list[int], list[int]]: A 4-tuple containing:
+            - norm_text (str): Language-normalised text.
+            - phones (list[str]): List of phoneme symbol strings.
+            - tones (list[int]): List of tone integers, one per phoneme.
+            - word2ph (list[int]): List mapping each word to its phoneme count.
     """
     language_module = language_module_map[language]
     norm_text = language_module.text_normalize(text)
@@ -66,25 +62,23 @@ def clean_text_bert(
 ) -> tuple[str, list[str], list[int], list[int], torch.Tensor]:
     """Normalise text, run G2P, and extract BERT features.
 
-    The ``word2ph`` counts are doubled internally (with an extra +1 for the
+    The word2ph counts are doubled internally (with an extra +1 for the
     first element) before being passed to the BERT feature extractor to account
-    for the ``[CLS]``/``[SEP]`` tokens.  The original ``word2ph`` is returned
-    unmodified.
+    for the [CLS]/[SEP] tokens. The original word2ph is returned unmodified.
 
     Args:
-        text: Raw input text string.
-        language: Language code (e.g. ``"ZH"``, ``"EN"``).
-        device: Target device string for the BERT model (e.g. ``"cuda:0"``).
-            Passed directly to the language module's ``get_bert_feature``.
+        text (str): Raw input text string.
+        language (str): Language code (e.g., "ZH", "EN").
+        device (Optional[str], optional): Target device string for the BERT model (e.g., "cuda:0").
+            Passed directly to the language module's get_bert_feature. Defaults to None.
 
     Returns:
-        A 5-tuple ``(norm_text, phones, tones, word2ph, bert)`` where:
-
-        * **norm_text** – language-normalised text.
-        * **phones** – list of phoneme symbol strings.
-        * **tones** – list of tone integers, one per phoneme.
-        * **word2ph** – original (unmodified) word-to-phoneme count list.
-        * **bert** – BERT feature tensor with shape ``(hidden_size, num_phones)``.
+        tuple[str, list[str], list[int], list[int], torch.Tensor]: A 5-tuple containing:
+            - norm_text (str): Language-normalised text.
+            - phones (list[str]): List of phoneme symbol strings.
+            - tones (list[int]): List of tone integers, one per phoneme.
+            - word2ph (list[int]): Original (unmodified) word-to-phoneme count list.
+            - bert (torch.Tensor): BERT feature tensor with shape (hidden_size, num_phones).
     """
     language_module = language_module_map[language]
     norm_text = language_module.text_normalize(text)
@@ -99,22 +93,20 @@ def clean_text_bert(
     return norm_text, phones, tones, word2ph_bak, bert
 
 
-def text_to_sequence(
-    text: str,
-    language: str,
-) -> tuple[list[int], list[int], list[int]]:
+def text_to_sequence(text: str, language: str) -> tuple[list[int], list[int], list[int]]:
     """Clean text and convert the resulting phones to integer ID sequences.
 
-    Convenience wrapper that chains :func:`clean_text` and
-    :func:`cleaned_text_to_sequence`.
+    Convenience wrapper that chains clean_text and cleaned_text_to_sequence.
 
     Args:
-        text: Raw input text string.
-        language: Language code (e.g. ``"ZH"``, ``"EN"``).
+        text (str): Raw input text string.
+        language (str): Language code (e.g., "ZH", "EN").
 
     Returns:
-        A 3-tuple ``(phones, tones, lang_ids)`` — see
-        :func:`~melo.text.cleaned_text_to_sequence` for details.
+        tuple[list[int], list[int], list[int]]: A 3-tuple containing:
+            - phones (list[int]): List of integer phone IDs.
+            - tones (list[int]): List of integer tone IDs.
+            - lang_ids (list[int]): List of language IDs, one per phone.
     """
     norm_text, phones, tones, word2ph = clean_text(text, language)
     return cleaned_text_to_sequence(phones, tones, language)

@@ -1,14 +1,18 @@
+"""Module for processing mixed Chinese and English text, including G2P and normalization."""
+
 import os
 import re
+from typing import List, Tuple, Optional, Any
 
 import cn2an
+import jieba.posseg as psg
 from pypinyin import lazy_pinyin, Style
+from transformers import AutoTokenizer
 
 # from text.symbols import punctuation
 from .symbols import language_tone_start_map
 from .tone_sandhi import ToneSandhi
 from .english import g2p as g2p_en
-from transformers import AutoTokenizer
 
 punctuation = ["!", "?", "…", ",", ".", "'", "-"]
 current_file_path = os.path.dirname(__file__)
@@ -16,8 +20,6 @@ pinyin_to_symbol_map = {
     line.split("\t")[0]: line.strip().split("\t")[1]
     for line in open(os.path.join(current_file_path, "opencpop-strict.txt")).readlines()
 }
-
-import jieba.posseg as psg
 
 
 rep_map = {
@@ -56,7 +58,15 @@ rep_map = {
 tone_modifier = ToneSandhi()
 
 
-def replace_punctuation(text):
+def replace_punctuation(text: str) -> str:
+    """Replace specific punctuation and characters in text.
+
+    Args:
+        text (str): The input text.
+
+    Returns:
+        str: The text with punctuation replaced and filtered.
+    """
     text = text.replace("嗯", "恩").replace("呣", "母")
     pattern = re.compile("|".join(re.escape(p) for p in rep_map.keys()))
     replaced_text = pattern.sub(lambda x: rep_map[x.group()], text)
@@ -66,7 +76,16 @@ def replace_punctuation(text):
     return replaced_text
 
 
-def g2p(text, impl='v2'):
+def g2p(text: str, impl: str = 'v2') -> Tuple[List[str], List[int], List[int]]:
+    """Convert mixed text to phonemes and tones.
+
+    Args:
+        text (str): The input text.
+        impl (str, optional): The implementation version to use ('v1' or 'v2'). Defaults to 'v2'.
+
+    Returns:
+        Tuple[List[str], List[int], List[int]]: Phonemes, tones, and word-to-phoneme mappings.
+    """
     pattern = r"(?<=[{0}])\s*".format("".join(punctuation))
     sentences = [i for i in re.split(pattern, text) if i.strip() != ""]
     if impl == 'v1':
@@ -84,7 +103,15 @@ def g2p(text, impl='v2'):
     return phones, tones, word2ph
 
 
-def _get_initials_finals(word):
+def _get_initials_finals(word: str) -> Tuple[List[str], List[str]]:
+    """Get initials and finals for a given word using pypinyin.
+
+    Args:
+        word (str): The input word.
+
+    Returns:
+        Tuple[List[str], List[str]]: A tuple of initials and finals lists.
+    """
     initials = []
     finals = []
     orig_initials = lazy_pinyin(word, neutral_tone_with_five=True, style=Style.INITIALS)
@@ -98,7 +125,15 @@ def _get_initials_finals(word):
 
 model_id = 'bert-base-multilingual-uncased'
 tokenizer = AutoTokenizer.from_pretrained(model_id)
-def _g2p(segments):
+def _g2p(segments: List[str]) -> Tuple[List[str], List[int], List[int]]:
+    """Internal function to convert segments to phonemes and tones (v1).
+
+    Args:
+        segments (List[str]): A list of text segments.
+
+    Returns:
+        Tuple[List[str], List[int], List[int]]: Phonemes, tones, and word-to-phoneme mappings.
+    """
     phones_list = []
     tones_list = []
     word2ph = []
@@ -186,7 +221,15 @@ def _g2p(segments):
     return phones_list, tones_list, word2ph
 
 
-def text_normalize(text):
+def text_normalize(text: str) -> str:
+    """Normalize text by converting numbers to characters and replacing punctuation.
+
+    Args:
+        text (str): The input text.
+
+    Returns:
+        str: The normalized text.
+    """
     numbers = re.findall(r"\d+(?:\.?\d+)?", text)
     for number in numbers:
         text = text.replace(number, cn2an.an2cn(number), 1)
@@ -194,12 +237,30 @@ def text_normalize(text):
     return text
 
 
-def get_bert_feature(text, word2ph, device):
+def get_bert_feature(text: str, word2ph: List[int], device: str) -> Any:
+    """Extract BERT features for the given text.
+
+    Args:
+        text (str): The input text.
+        word2ph (List[int]): A list mapping words to phonemes.
+        device (str): The device to use.
+
+    Returns:
+        Any: The extracted BERT features.
+    """
     from . import chinese_bert
     return chinese_bert.get_bert_feature(text, word2ph, model_id='bert-base-multilingual-uncased', device=device)
 
 from .chinese import _g2p as _chinese_g2p
-def _g2p_v2(segments):
+def _g2p_v2(segments: List[str]) -> Tuple[List[str], List[int], List[int]]:
+    """Internal function to convert segments to phonemes and tones (v2).
+
+    Args:
+        segments (List[str]): A list of text segments.
+
+    Returns:
+        Tuple[List[str], List[int], List[int]]: Phonemes, tones, and word-to-phoneme mappings.
+    """
     spliter = '#$&^!@'
 
     phones_list = []

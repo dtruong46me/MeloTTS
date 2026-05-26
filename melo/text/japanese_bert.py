@@ -1,11 +1,37 @@
-import torch
-from transformers import AutoTokenizer, AutoModelForMaskedLM
+"""Module for extracting BERT features for Japanese text.
+
+This module provides functions to process Japanese text using a pre-trained
+BERT model and extract phoneme-level features for Text-To-Speech systems.
+"""
+
 import sys
+from typing import Optional
+
+import torch
+from transformers import AutoModelForMaskedLM, AutoTokenizer
 
 
 models = {}
 tokenizers = {}
-def get_bert_feature(text, word2ph, device=None, model_id='tohoku-nlp/bert-base-japanese-v3'):
+
+
+def get_bert_feature(
+    text: str,
+    word2ph: list[int],
+    device: Optional[str] = None,
+    model_id: str = "tohoku-nlp/bert-base-japanese-v3",
+) -> torch.Tensor:
+    """Extracts BERT features for the given Japanese text at the phoneme level.
+
+    Args:
+        text (str): The input Japanese text.
+        word2ph (list[int]): A list mapping words to phoneme counts.
+        device (Optional[str], optional): The device to run the model on ('cuda', 'cpu', or 'mps'). Defaults to None.
+        model_id (str, optional): The Hugging Face model ID to use. Defaults to 'tohoku-nlp/bert-base-japanese-v3'.
+
+    Returns:
+        torch.Tensor: The extracted BERT features at the phoneme level.
+    """
     global model
     global tokenizer
 

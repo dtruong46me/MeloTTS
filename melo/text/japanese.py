@@ -1,3 +1,9 @@
+"""Module for processing and converting Japanese text to phonemes.
+
+This module provides utilities to convert Japanese text (hiragana, katakana, kanji)
+into phonemes suitable for Text-To-Speech processing.
+"""
+
 # Convert Japanese text to phonemes which is
 # compatible with Julius https://github.com/julius-speech/segmentation-kit
 import re
@@ -322,7 +328,12 @@ _COLON_RX = re.compile(":+")
 _REJECT_RX = re.compile("[^ a-zA-Z:,.?]")
 
 
-def _makerulemap():
+def _makerulemap() -> tuple[dict[str, str], dict[str, str]]:
+    """Create mapping rules from conversion rules string list.
+
+    Returns:
+        tuple[dict[str, str], dict[str, str]]: A tuple containing dictionaries for length 1 and length 2 conversions.
+    """
     l = [tuple(x.split("/")) for x in _CONVRULES]
     return tuple({k: v for k, v in l if len(k) == i} for i in (1, 2))
 
@@ -330,8 +341,15 @@ def _makerulemap():
 _RULEMAP1, _RULEMAP2 = _makerulemap()
 
 
-def kata2phoneme(text: str) -> str:
-    """Convert katakana text to phonemes."""
+def kata2phoneme(text: str) -> list[str]:
+    """Convert katakana text to phonemes.
+
+    Args:
+        text (str): The katakana text to convert.
+
+    Returns:
+        list[str]: A list of phonemes.
+    """
     text = text.strip()
     res = []
     while text:
@@ -358,6 +376,14 @@ _HIRA2KATATRANS = str.maketrans(_HIRAGANA, _KATAKANA)
 
 
 def hira2kata(text: str) -> str:
+    """Convert hiragana text to katakana text.
+
+    Args:
+        text (str): The input hiragana text.
+
+    Returns:
+        str: The converted katakana text.
+    """
     text = text.translate(_HIRA2KATATRANS)
     return text.replace("う゛", "ヴ")
 
@@ -368,6 +394,14 @@ _TAGGER = MeCab.Tagger()
 
 
 def text2kata(text: str) -> str:
+    """Convert arbitrary Japanese text to katakana.
+
+    Args:
+        text (str): The input text containing kanji, hiragana, etc.
+
+    Returns:
+        str: The converted katakana text.
+    """
     parsed = _TAGGER.parse(text)
     res = []
     for line in parsed.split("\n"):
@@ -465,6 +499,14 @@ _NUMBER_RX = re.compile(r"[0-9]+(\.[0-9]+)?")
 
 
 def japanese_convert_numbers_to_words(text: str) -> str:
+    """Convert numbers in the text to their corresponding Japanese words.
+
+    Args:
+        text (str): The input text containing numbers.
+
+    Returns:
+        str: The text with numbers converted to Japanese words.
+    """
     res = _NUMBER_WITH_SEPARATOR_RX.sub(lambda m: m[0].replace(",", ""), text)
     res = _CURRENCY_RX.sub(lambda m: m[2] + _CURRENCY_MAP.get(m[1], m[1]), res)
     res = _NUMBER_RX.sub(lambda m: num2words(m[0], lang="ja"), res)
@@ -472,11 +514,26 @@ def japanese_convert_numbers_to_words(text: str) -> str:
 
 
 def japanese_convert_alpha_symbols_to_words(text: str) -> str:
+    """Convert alphabetic symbols in the text to their Japanese readings.
+
+    Args:
+        text (str): The input text containing alphabetic symbols.
+
+    Returns:
+        str: The text with alphabetic symbols converted to Japanese words.
+    """
     return "".join([_ALPHASYMBOL_YOMI.get(ch, ch) for ch in text.lower()])
 
 
-def japanese_text_to_phonemes(text: str) -> str:
-    """Convert Japanese text to phonemes."""
+def japanese_text_to_phonemes(text: str) -> list[str]:
+    """Convert Japanese text to a list of phonemes.
+
+    Args:
+        text (str): The input Japanese text.
+
+    Returns:
+        list[str]: A list of phonemes.
+    """
     res = unicodedata.normalize("NFKC", text)
     res = japanese_convert_numbers_to_words(res)
     res = japanese_convert_alpha_symbols_to_words(res)
@@ -485,7 +542,15 @@ def japanese_text_to_phonemes(text: str) -> str:
     return res
 
 
-def is_japanese_character(char):
+def is_japanese_character(char: str) -> bool:
+    """Check if a character is a Japanese character based on Unicode ranges.
+
+    Args:
+        char (str): The character to check.
+
+    Returns:
+        bool: True if the character is Japanese, False otherwise.
+    """
     # 定义日语文字系统的 Unicode 范围
     japanese_ranges = [
         (0x3040, 0x309F),  # 平假名
@@ -521,7 +586,15 @@ rep_map = {
 }
 
 
-def replace_punctuation(text):
+def replace_punctuation(text: str) -> str:
+    """Replace punctuation in the text with standardized tokens.
+
+    Args:
+        text (str): The input text.
+
+    Returns:
+        str: The text with replaced punctuation.
+    """
     pattern = re.compile("|".join(re.escape(p) for p in rep_map.keys()))
 
     replaced_text = pattern.sub(lambda x: rep_map[x.group()], text)
@@ -545,7 +618,15 @@ kakasi.setMode("H", "K")  # Hiragana to Katakana
 # Convert Chinese characters to Katakana
 conv = kakasi.getConverter()
 
-def text_normalize(text):
+def text_normalize(text: str) -> str:
+    """Normalize Japanese text.
+
+    Args:
+        text (str): The input Japanese text.
+
+    Returns:
+        str: The normalized text.
+    """
     res = unicodedata.normalize("NFKC", text)
     res = japanese_convert_numbers_to_words(res)
     res = "".join([i for i in res if is_japanese_character(i)])
@@ -554,7 +635,16 @@ def text_normalize(text):
     return res
 
 
-def distribute_phone(n_phone, n_word):
+def distribute_phone(n_phone: int, n_word: int) -> list[int]:
+    """Distribute phonemes evenly among words.
+
+    Args:
+        n_phone (int): The total number of phonemes.
+        n_word (int): The total number of words.
+
+    Returns:
+        list[int]: A list representing the distribution of phonemes per word.
+    """
     phones_per_word = [0] * n_word
     for task in range(n_phone):
         min_tasks = min(phones_per_word)
@@ -568,7 +658,16 @@ def distribute_phone(n_phone, n_word):
 
 model_id = 'tohoku-nlp/bert-base-japanese-v3'
 tokenizer = AutoTokenizer.from_pretrained(model_id)
-def g2p(norm_text):
+def g2p(norm_text: str) -> tuple[list[str], list[int], list[int]]:
+    """Convert normalized text to phonemes, tones, and word-to-phoneme mappings.
+
+    Args:
+        norm_text (str): The normalized Japanese text.
+
+    Returns:
+        tuple[list[str], list[int], list[int]]: A tuple containing a list of phonemes,
+            a list of tones, and a list of word-to-phoneme mappings.
+    """
 
     tokenized = tokenizer.tokenize(norm_text)
     phs = []
@@ -611,7 +710,17 @@ def g2p(norm_text):
     assert len(word2ph) == len(tokenized) + 2
     return phones, tones, word2ph
 
-def get_bert_feature(text, word2ph, device):
+def get_bert_feature(text: str, word2ph: list[int], device: str) -> "torch.Tensor":
+    """Extract BERT features for the given Japanese text.
+
+    Args:
+        text (str): The input text.
+        word2ph (list[int]): A list mapping words to phoneme counts.
+        device (str): The device to run the model on.
+
+    Returns:
+        torch.Tensor: The extracted BERT features at the phoneme level.
+    """
     from text import japanese_bert
 
     return japanese_bert.get_bert_feature(text, word2ph, device=device)

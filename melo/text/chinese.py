@@ -1,5 +1,8 @@
+"""Module for processing Chinese text, including grapheme-to-phoneme conversion and normalization."""
+
 import os
 import re
+from typing import List, Tuple, Optional, Any
 
 import cn2an
 from pypinyin import lazy_pinyin, Style
@@ -52,7 +55,15 @@ rep_map = {
 tone_modifier = ToneSandhi()
 
 
-def replace_punctuation(text):
+def replace_punctuation(text: str) -> str:
+    """Replace specific punctuation and characters in Chinese text.
+
+    Args:
+        text (str): The input text.
+
+    Returns:
+        str: The text with punctuation replaced and filtered.
+    """
     text = text.replace("嗯", "恩").replace("呣", "母")
     pattern = re.compile("|".join(re.escape(p) for p in rep_map.keys()))
 
@@ -65,7 +76,15 @@ def replace_punctuation(text):
     return replaced_text
 
 
-def g2p(text):
+def g2p(text: str) -> Tuple[List[str], List[int], List[int]]:
+    """Convert text to phonemes and tones.
+
+    Args:
+        text (str): The input text.
+
+    Returns:
+        Tuple[List[str], List[int], List[int]]: Phonemes, tones, and word-to-phoneme mappings.
+    """
     pattern = r"(?<=[{0}])\s*".format("".join(punctuation))
     sentences = [i for i in re.split(pattern, text) if i.strip() != ""]
     phones, tones, word2ph = _g2p(sentences)
@@ -77,7 +96,15 @@ def g2p(text):
     return phones, tones, word2ph
 
 
-def _get_initials_finals(word):
+def _get_initials_finals(word: str) -> Tuple[List[str], List[str]]:
+    """Get initials and finals for a given word using pypinyin.
+
+    Args:
+        word (str): The input word.
+
+    Returns:
+        Tuple[List[str], List[str]]: A tuple of initials and finals lists.
+    """
     initials = []
     finals = []
     orig_initials = lazy_pinyin(word, neutral_tone_with_five=True, style=Style.INITIALS)
@@ -90,7 +117,15 @@ def _get_initials_finals(word):
     return initials, finals
 
 
-def _g2p(segments):
+def _g2p(segments: List[str]) -> Tuple[List[str], List[int], List[int]]:
+    """Internal function to convert segments to phonemes and tones.
+
+    Args:
+        segments (List[str]): A list of text segments.
+
+    Returns:
+        Tuple[List[str], List[int], List[int]]: Phonemes, tones, and word-to-phoneme mappings.
+    """
     phones_list = []
     tones_list = []
     word2ph = []
@@ -168,7 +203,15 @@ def _g2p(segments):
     return phones_list, tones_list, word2ph
 
 
-def text_normalize(text):
+def text_normalize(text: str) -> str:
+    """Normalize text by converting numbers to characters and replacing punctuation.
+
+    Args:
+        text (str): The input text.
+
+    Returns:
+        str: The normalized text.
+    """
     numbers = re.findall(r"\d+(?:\.?\d+)?", text)
     for number in numbers:
         text = text.replace(number, cn2an.an2cn(number), 1)
@@ -176,7 +219,17 @@ def text_normalize(text):
     return text
 
 
-def get_bert_feature(text, word2ph, device=None):
+def get_bert_feature(text: str, word2ph: List[int], device: Optional[str] = None) -> Any:
+    """Extract BERT features for the given text.
+
+    Args:
+        text (str): The input text.
+        word2ph (List[int]): A list mapping words to phonemes.
+        device (Optional[str], optional): The device to use. Defaults to None.
+
+    Returns:
+        Any: The extracted BERT features.
+    """
     from text import chinese_bert
 
     return chinese_bert.get_bert_feature(text, word2ph, device=device)

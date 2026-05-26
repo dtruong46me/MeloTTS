@@ -1,10 +1,10 @@
 """Text processing package for MeloTTS.
 
 This module exposes core utilities for converting cleaned phoneme sequences into
-integer ID sequences and for retrieving language-specific BERT features.  It
-re-exports all public names from :mod:`melo.text.symbols` so that callers can
-access ``symbols``, ``language_tone_start_map``, ``language_id_map``, etc.
-directly from this package.
+integer ID sequences and for retrieving language-specific BERT features. It
+re-exports all public names from melo.text.symbols so that callers can
+access symbols, language_tone_start_map, language_id_map, etc. directly from
+this package.
 """
 
 from __future__ import annotations
@@ -34,21 +34,20 @@ def cleaned_text_to_sequence(
     per-phone language ID list.
 
     Args:
-        cleaned_text: List of phoneme symbol strings produced by a G2P module.
-        tones: List of raw tone integers, one per phoneme in ``cleaned_text``.
-        language: Language code (e.g. ``"ZH"``, ``"EN"``), used to look up
-            tone and language ID offsets in ``language_tone_start_map`` and
-            ``language_id_map``.
-        symbol_to_id: Optional custom symbol-to-ID mapping.  When ``None``
-            (default) the module-level ``_symbol_to_id`` mapping is used.
+        cleaned_text (list[str]): List of phoneme symbol strings produced by a G2P module.
+        tones (list[int]): List of raw tone integers, one per phoneme in cleaned_text.
+        language (str): Language code (e.g., "ZH", "EN"), used to look up
+            tone and language ID offsets in language_tone_start_map and
+            language_id_map.
+        symbol_to_id (Optional[dict[str, int]], optional): Optional custom symbol-to-ID
+            mapping. When None (default) the module-level _symbol_to_id mapping is used.
+            Defaults to None.
 
     Returns:
-        A 3-tuple ``(phones, tones, lang_ids)`` where:
-
-        * **phones** – list of integer phone IDs.
-        * **tones** – list of integer tone IDs, offset by the language tone
-          start value.
-        * **lang_ids** – list of language IDs, one per phone.
+        tuple[list[int], list[int], list[int]]: A 3-tuple containing:
+            - phones (list[int]): List of integer phone IDs.
+            - tones (list[int]): List of integer tone IDs, offset by the language tone start value.
+            - lang_ids (list[int]): List of language IDs, one per phone.
     """
     symbol_to_id_map = symbol_to_id if symbol_to_id else _symbol_to_id
     phones = [symbol_to_id_map[symbol] for symbol in cleaned_text]
@@ -71,17 +70,15 @@ def get_bert(
     invokes it with the provided text and word-to-phoneme mapping.
 
     Args:
-        norm_text: Normalised input text string.
-        word2ph: List mapping each word to its phoneme count.
-        language: Language code selecting which BERT model to use.  Supported
-            codes: ``"ZH"``, ``"EN"``, ``"JP"``, ``"ZH_MIX_EN"``, ``"FR"``,
-            ``"SP"``, ``"ES"``, ``"KR"``.
-        device: Target device for the BERT tensor (e.g. ``"cuda:0"`` or
-            ``"cpu"``).
+        norm_text (str): Normalised input text string.
+        word2ph (list[int]): List mapping each word to its phoneme count.
+        language (str): Language code selecting which BERT model to use. Supported
+            codes: "ZH", "EN", "JP", "ZH_MIX_EN", "FR", "SP", "ES", "KR".
+        device (str | torch.device): Target device for the BERT tensor
+            (e.g., "cuda:0" or "cpu").
 
     Returns:
-        A ``torch.Tensor`` of BERT features with shape
-        ``(hidden_size, num_phones)``.
+        torch.Tensor: A torch.Tensor of BERT features with shape (hidden_size, num_phones).
     """
     from .chinese_bert import get_bert_feature as zh_bert
     from .english_bert import get_bert_feature as en_bert

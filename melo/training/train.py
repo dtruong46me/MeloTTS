@@ -1,6 +1,15 @@
 # flake8: noqa: E402
 
+"""
+Training module for MeloTTS.
+
+This module provides the main entry point for training the text-to-speech
+models, including distributed training setup, dataset loading, model
+initialization, and the training/evaluation loop.
+"""
+
 import logging
+from typing import Any, List, Optional
 import os
 
 import torch
@@ -44,7 +53,16 @@ torch.backends.cuda.enable_math_sdp(True)
 global_step = 0
 
 
-def run():
+def run() -> None:
+    """
+    Main entry point for starting the training process.
+
+    This function sets up the distributed environment, initializes the datasets,
+    data loaders, models (generator, discriminator, duration discriminator),
+    optimizers, and learning rate schedulers. It then starts the training loop
+    for the specified number of epochs.
+    """
+    # Get hyperparameters and initialize distributed training
     hps = utils.get_hparams()
     local_rank = int(os.environ["LOCAL_RANK"])
     dist.init_process_group(
@@ -58,12 +76,16 @@ def run():
     torch.manual_seed(hps.train.seed)
     torch.cuda.set_device(rank)
     global global_step
+
+    # Only rank 0 will log and save checkpoints to avoid conflicts in distributed training
     if rank == 0:
         logger = utils.get_logger(hps.model_dir)
         logger.info(hps)
         utils.check_git_hash(hps.model_dir)
         writer = SummaryWriter(log_dir=hps.model_dir)
         writer_eval = SummaryWriter(log_dir=os.path.join(hps.model_dir, "eval"))
+    
+    # Dataset and DataLoader setup
     train_dataset = TextAudioSpeakerLoader(hps.data.training_files, hps.data)
     train_sampler = DistributedBucketSampler(
         train_dataset,
@@ -73,7 +95,11 @@ def run():
         rank=rank,
         shuffle=True,
     )
+
+    # Create collate function and DataLoader for training dataset
     collate_fn = TextAudioSpeakerCollate()
+
+    # Train loader with distributed sampler and collate function
     train_loader = DataLoader(
         train_dataset,
         num_workers=16,
@@ -83,7 +109,9 @@ def run():
         batch_sampler=train_sampler,
         persistent_workers=True,
         prefetch_factor=4,
-    )  # DataLoader config could be adjusted.
+    )  
+    
+    # Only rank 0 will create the evaluation
     if rank == 0:
         eval_dataset = TextAudioSpeakerLoader(hps.data.validation_files, hps.data)
         eval_loader = DataLoader(
@@ -95,6 +123,8 @@ def run():
             drop_last=False,
             collate_fn=collate_fn,
         )
+    
+    # If use_noise_scaled_mas -> VITS2, else -> VITS1
     if hps.model.use_noise_scaled_mas:
         print("Using noise scaled MAS for VITS2")
         mas_noise_scale_initial = 0.01
@@ -103,6 +133,8 @@ def run():
         print("Using normal MAS for VITS1")
         mas_noise_scale_initial = 0.0
         noise_scale_delta = 0.0
+    
+    # If use_duration_discriminator -> VITS2, else -> VITS1
     if hps.model.use_duration_discriminator:
         print("Using duration discriminator for VITS2")
         net_dur_disc = DurationDiscriminator(
@@ -114,6 +146,8 @@ def run():
         ).cuda(rank)
     else:
         net_dur_disc = None
+
+    # If use_spk_conditioned_encoder -> VITS2, else -> VITS1
     if getattr(hps.model, "use_spk_conditioned_encoder", False):
         if hps.data.n_speakers == 0:
             raise ValueError(
@@ -122,6 +156,7 @@ def run():
     else:
         print("Using normal encoder for VITS1")
 
+    # Initialize generator & discriminator, optimizers, and wrap models with DDP
     net_g = SynthesizerTrn(
         len(symbols),
         hps.data.filter_length // 2 + 1,
@@ -280,8 +315,32 @@ def run():
 
 
 def train_and_evaluate(
-    rank, epoch, hps, nets, optims, schedulers, scaler, loaders, logger, writers
-):
+    rank: int,
+    epoch: int,
+    hps: Any,
+    nets: List[Any],
+    optims: List[Any],
+    schedulers: List[Any],
+    scaler: Any,
+    loaders: List[Any],
+    logger: Any,
+    writers: Optional[List[Any]],
+) -> None:
+    """
+    Train and evaluate the models for one epoch.
+
+    Args:
+        rank (int): Rank of the current process in distributed training.
+        epoch (int): The current epoch number.
+        hps (Any): Hyperparameter configuration object.
+        nets (List[Any]): List of models [generator, discriminator, duration_discriminator].
+        optims (List[Any]): List of optimizers corresponding to the models.
+        schedulers (List[Any]): List of learning rate schedulers corresponding to the optimizers.
+        scaler (Any): Gradient scaler for mixed precision training.
+        loaders (List[Any]): List of data loaders [train_loader, eval_loader].
+        logger (Any): Logger object for printing training progress.
+        writers (Optional[List[Any]]): List of TensorBoard SummaryWriters [train_writer, eval_writer].
+    """
     net_g, net_d, net_dur_disc = nets
     optim_g, optim_d, optim_dur_disc = optims
     scheduler_g, scheduler_d, scheduler_dur_disc = schedulers
@@ -527,7 +586,21 @@ def train_and_evaluate(
     torch.cuda.empty_cache()
 
 
-def evaluate(hps, generator, eval_loader, writer_eval):
+def evaluate(
+    hps: Any,
+    generator: Any,
+    eval_loader: Any,
+    writer_eval: Any,
+) -> None:
+    """
+    Evaluate the generator model and write results to TensorBoard.
+
+    Args:
+        hps (Any): Hyperparameter configuration object.
+        generator (Any): The generator model to be evaluated.
+        eval_loader (Any): DataLoader providing the evaluation dataset.
+        writer_eval (Any): TensorBoard SummaryWriter for evaluation metrics.
+    """
     generator.eval()
     image_dict = {}
     audio_dict = {}

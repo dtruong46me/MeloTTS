@@ -1,4 +1,7 @@
-""" from https://github.com/keithito/tacotron """
+"""Module for normalizing numbers in English text.
+
+From https://github.com/keithito/tacotron
+"""
 
 import re
 from typing import Dict
@@ -13,15 +16,40 @@ _ordinal_re = re.compile(r"[0-9]+(st|nd|rd|th)")
 _number_re = re.compile(r"-?[0-9]+")
 
 
-def _remove_commas(m):
+def _remove_commas(m: re.Match) -> str:
+    """Remove commas from a matched number string.
+
+    Args:
+        m (re.Match): A regular expression match object containing the number string.
+
+    Returns:
+        str: The number string with commas removed.
+    """
     return m.group(1).replace(",", "")
 
 
-def _expand_decimal_point(m):
+def _expand_decimal_point(m: re.Match) -> str:
+    """Expand decimal points into the word "point".
+
+    Args:
+        m (re.Match): A regular expression match object containing the decimal number.
+
+    Returns:
+        str: The decimal number with the point replaced by the word " point ".
+    """
     return m.group(1).replace(".", " point ")
 
 
 def __expand_currency(value: str, inflection: Dict[float, str]) -> str:
+    """Expand a currency value into words.
+
+    Args:
+        value (str): The numeric value of the currency.
+        inflection (Dict[float, str]): A dictionary mapping numeric values to currency words.
+
+    Returns:
+        str: The expanded currency string.
+    """
     parts = value.replace(",", "").split(".")
     if len(parts) > 2:
         return f"{value} {inflection[2]}"  # Unexpected format
@@ -39,7 +67,15 @@ def __expand_currency(value: str, inflection: Dict[float, str]) -> str:
     return " ".join(text)
 
 
-def _expand_currency(m: "re.Match") -> str:
+def _expand_currency(m: re.Match) -> str:
+    """Expand a currency match object into words.
+
+    Args:
+        m (re.Match): A regular expression match object containing the currency symbol and value.
+
+    Returns:
+        str: The expanded currency string.
+    """
     currencies = {
         "$": {
             0.01: "cent",
@@ -71,11 +107,27 @@ def _expand_currency(m: "re.Match") -> str:
     return __expand_currency(value, currency)
 
 
-def _expand_ordinal(m):
+def _expand_ordinal(m: re.Match) -> str:
+    """Expand an ordinal number match object into words.
+
+    Args:
+        m (re.Match): A regular expression match object containing the ordinal number.
+
+    Returns:
+        str: The expanded ordinal string.
+    """
     return _inflect.number_to_words(m.group(0))
 
 
-def _expand_number(m):
+def _expand_number(m: re.Match) -> str:
+    """Expand a number match object into words.
+
+    Args:
+        m (re.Match): A regular expression match object containing the number.
+
+    Returns:
+        str: The expanded number string.
+    """
     num = int(m.group(0))
     if 1000 < num < 3000:
         if num == 2000:
@@ -88,7 +140,15 @@ def _expand_number(m):
     return _inflect.number_to_words(num, andword="")
 
 
-def normalize_numbers(text):
+def normalize_numbers(text: str) -> str:
+    """Normalize numbers in the given text.
+
+    Args:
+        text (str): The input text containing numbers to be normalized.
+
+    Returns:
+        str: The text with all numbers normalized to words.
+    """
     text = re.sub(_comma_number_re, _remove_commas, text)
     text = re.sub(_currency_re, _expand_currency, text)
     text = re.sub(_decimal_number_re, _expand_decimal_point, text)

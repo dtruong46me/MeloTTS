@@ -1,8 +1,11 @@
+"""Module providing a Gruut wrapper for grapheme-to-phoneme conversion."""
+
 import importlib
-from typing import List
+import importlib.util
+from typing import List, Optional
 
 import gruut
-from gruut_ipa import IPA # pip install gruut_ipa
+from gruut_ipa import IPA  # pip install gruut_ipa
 
 from .base import BasePhonemizer
 from .punctuation import Punctuation
@@ -12,7 +15,7 @@ GRUUT_TRANS_TABLE = str.maketrans("g", "ɡ")
 
 
 class Gruut(BasePhonemizer):
-    """Gruut wrapper for G2P
+    """Gruut wrapper for G2P.
 
     Args:
         language (str):
@@ -31,7 +34,6 @@ class Gruut(BasePhonemizer):
             If true, keep the stress characters after phonemization. Defaults to False.
 
     Example:
-
         >>> from TTS.tts.utils.text.phonemizers.gruut_wrapper import Gruut
         >>> phonemizer = Gruut('en-us')
         >>> phonemizer.phonemize("Be a voice, not an! echo?", separator="|")
@@ -41,26 +43,40 @@ class Gruut(BasePhonemizer):
     def __init__(
         self,
         language: str,
-        punctuations=Punctuation.default_puncs(),
-        keep_puncs=True,
-        use_espeak_phonemes=False,
-        keep_stress=False,
-    ):
+        punctuations: str = Punctuation.default_puncs(),
+        keep_puncs: bool = True,
+        use_espeak_phonemes: bool = False,
+        keep_stress: bool = False,
+    ) -> None:
+        """Initializes the Gruut phonemizer wrapper.
+
+        Args:
+            language (str): Valid language code.
+            punctuations (str, optional): Characters to be treated as punctuation.
+            keep_puncs (bool, optional): Keep the punctuations after phonemization.
+            use_espeak_phonemes (bool, optional): Use espeak lexicons instead of default Gruut lexicons.
+            keep_stress (bool, optional): Keep the stress characters after phonemization.
+        """
         super().__init__(language, punctuations=punctuations, keep_puncs=keep_puncs)
-        self.use_espeak_phonemes = use_espeak_phonemes
-        self.keep_stress = keep_stress
+        self.use_espeak_phonemes: bool = use_espeak_phonemes
+        self.keep_stress: bool = keep_stress
 
     @staticmethod
-    def name():
+    def name() -> str:
+        """Get the name of the phonemizer backend.
+
+        Returns:
+            str: The name of the backend ("gruut").
+        """
         return "gruut"
 
-    def phonemize_gruut(self, text: str, separator: str = "|", tie=False) -> str:  # pylint: disable=unused-argument
+    def phonemize_gruut(self, text: str, separator: str = "|", tie: bool = False) -> str:  # pylint: disable=unused-argument
         """Convert input text to phonemes.
 
-        Gruut phonemizes the given `str` by seperating each phoneme character with `separator`, even for characters
-        that constitude a single sound.
+        Gruut phonemizes the given `str` by separating each phoneme character with `separator`, even for characters
+        that constitute a single sound.
 
-        It doesn't affect 🐸TTS since it individually converts each character to token IDs.
+        It doesn't affect TTS since it individually converts each character to token IDs.
 
         Examples::
             "hello how are you today?" -> `h|ɛ|l|o|ʊ| h|a|ʊ| ɑ|ɹ| j|u| t|ə|d|e|ɪ`
@@ -68,12 +84,16 @@ class Gruut(BasePhonemizer):
         Args:
             text (str):
                 Text to be converted to phonemes.
+            separator (str, optional):
+                The separator to use between phonemes. Defaults to "|".
+            tie (bool, optional):
+                When True use a '͡' character between consecutive characters of a single phoneme.
+                Else separate phoneme with '_'. This option requires espeak>=1.49. Default to False.
 
-            tie (bool, optional) : When True use a '͡' character between
-                consecutive characters of a single phoneme. Else separate phoneme
-                with '_'. This option requires espeak>=1.49. Default to False.
+        Returns:
+            str: The phonemized text.
         """
-        ph_list = []
+        ph_list: List[List[str]] = []
         for sentence in gruut.sentences(text, lang=self.language, espeak=self.use_espeak_phonemes):
             for word in sentence:
                 if word.is_break:
@@ -86,7 +106,7 @@ class Gruut(BasePhonemizer):
                         ph_list.append([word.text])
                 elif word.phonemes:
                     # Add phonemes for word
-                    word_phonemes = []
+                    word_phonemes: List[str] = []
 
                     for word_phoneme in word.phonemes:
                         if not self.keep_stress:
@@ -106,23 +126,40 @@ class Gruut(BasePhonemizer):
         ph = f"{separator} ".join(ph_words)
         return ph
 
-    def _phonemize(self, text, separator):
+    def _phonemize(self, text: str, separator: str) -> str:
+        """The main phonemization method.
+
+        Args:
+            text (str): Text to phonemize.
+            separator (str): Separator to use between phonemes.
+
+        Returns:
+            str: The phonemized text.
+        """
         return self.phonemize_gruut(text, separator, tie=False)
 
-    def is_supported_language(self, language):
-        """Returns True if `language` is supported by the backend"""
+    def is_supported_language(self, language: str) -> bool:
+        """Returns True if `language` is supported by the backend.
+
+        Args:
+            language (str): Language code to check.
+
+        Returns:
+            bool: True if supported.
+        """
         return gruut.is_language_supported(language)
 
     @staticmethod
-    def supported_languages() -> List:
-        """Get a dictionary of supported languages.
+    def supported_languages() -> List[str]:
+        """Get a list of supported languages.
 
         Returns:
-            List: List of language codes.
+            List[str]: List of language codes.
         """
         return list(gruut.get_supported_languages())
 
-    def version(self):
+    @classmethod
+    def version(cls) -> str:
         """Get the version of the used backend.
 
         Returns:
@@ -131,8 +168,12 @@ class Gruut(BasePhonemizer):
         return gruut.__version__
 
     @classmethod
-    def is_available(cls):
-        """Return true if ESpeak is available else false"""
+    def is_available(cls) -> bool:
+        """Return true if gruut is available else false.
+
+        Returns:
+            bool: True if gruut is available.
+        """
         return importlib.util.find_spec("gruut") is not None
 
 
@@ -211,48 +252,45 @@ if __name__ == "__main__":
         "\u2191",
         " ",
         "ɣ",
-        "ɡ", 
-        "r", 
-        "ɲ", 
-        "ʝ", 
+        "ɡ",
+        "r",
+        "ɲ",
+        "ʝ",
         "ʎ",
         "ː"
     ]
-    with open('/home/xumin/workspace/VITS-Training-Multiling/230715_fr/metadata.txt', 'r') as f:
+    with open("/home/xumin/workspace/VITS-Training-Multiling/230715_fr/metadata.txt", "r") as f:
         lines = f.readlines()
-    
 
-    used_sym = []
-    not_existed_sym = []
-    phonemes = []
+    used_sym: List[str] = []
+    not_existed_sym: List[str] = []
+    phonemes: List[str] = []
 
     for line in lines:
-        text = line.split('|')[-1].strip()
+        text = line.split("|")[-1].strip()
         text = french_cleaners(text)
-        ipa =  e.phonemize(text, separator="")
+        ipa = e.phonemize(text, separator="")
         phonemes.append(ipa)
         for s in ipa:
             if s not in symbols:
                 if s not in not_existed_sym:
-                    print(f'not_existed char: {s}')
+                    print(f"not_existed char: {s}")
                     not_existed_sym.append(s)
             else:
                 if s not in used_sym:
                     # print(f'used char: {s}')
                     used_sym.append(s)
-    
+
     print(used_sym)
     print(not_existed_sym)
 
-
-    with open('./text/fr_phonemizer/french_symbols.txt', 'w') as g:
+    with open("./text/fr_phonemizer/french_symbols.txt", "w") as g:
         g.writelines(symbols + not_existed_sym)
-        
-    with open('./text/fr_phonemizer/example_ipa.txt', 'w') as g:
+
+    with open("./text/fr_phonemizer/example_ipa.txt", "w") as g:
         g.writelines(phonemes)
 
-    data = {'symbols': symbols + not_existed_sym}
+    data = {"symbols": symbols + not_existed_sym}
 
-    with open('./text/fr_phonemizer/fr_symbols.json', 'w') as f:
+    with open("./text/fr_phonemizer/fr_symbols.json", "w") as f:
         json.dump(data, f, indent=4)
-

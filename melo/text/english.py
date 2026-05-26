@@ -1,16 +1,23 @@
-import pickle
+"""Module for English text processing and grapheme-to-phoneme conversion.
+
+This module provides utilities for normalizing English text, converting words
+to phonemes, and extracting BERT features for text-to-speech synthesis.
+"""
+
 import os
+import pickle
 import re
+from typing import Dict, List, Tuple, Optional
+
+import torch
 from g2p_en import G2p
+from transformers import AutoTokenizer
 
 from . import symbols
-
 from .english_utils.abbreviations import expand_abbreviations
-from .english_utils.time_norm import expand_time_english
 from .english_utils.number_norm import normalize_numbers
+from .english_utils.time_norm import expand_time_english
 from .japanese import distribute_phone
-
-from transformers import AutoTokenizer
 
 current_file_path = os.path.dirname(__file__)
 CMU_DICT_PATH = os.path.join(current_file_path, "cmudict.rep")
@@ -92,7 +99,15 @@ arpa = {
 }
 
 
-def post_replace_ph(ph):
+def post_replace_ph(ph: str) -> str:
+    """Replace a specific phoneme or punctuation mark with its standard equivalent.
+
+    Args:
+        ph (str): The input phoneme or punctuation mark.
+
+    Returns:
+        str: The processed phoneme.
+    """
     rep_map = {
         "：": ",",
         "；": ",",
@@ -115,8 +130,13 @@ def post_replace_ph(ph):
     return ph
 
 
-def read_dict():
-    g2p_dict = {}
+def read_dict() -> Dict[str, List[List[str]]]:
+    """Read the CMU pronunciation dictionary from the file.
+
+    Returns:
+        Dict[str, List[List[str]]]: A dictionary mapping words to their syllable pronunciations.
+    """
+    g2p_dict: Dict[str, List[List[str]]] = {}
     start_line = 49
     with open(CMU_DICT_PATH) as f:
         line = f.readline()
@@ -139,12 +159,23 @@ def read_dict():
     return g2p_dict
 
 
-def cache_dict(g2p_dict, file_path):
+def cache_dict(g2p_dict: Dict[str, List[List[str]]], file_path: str) -> None:
+    """Cache the parsed CMU dictionary to a pickle file.
+
+    Args:
+        g2p_dict (Dict[str, List[List[str]]]): The parsed pronunciation dictionary.
+        file_path (str): The path to the cache file.
+    """
     with open(file_path, "wb") as pickle_file:
         pickle.dump(g2p_dict, pickle_file)
 
 
-def get_dict():
+def get_dict() -> Dict[str, List[List[str]]]:
+    """Get the CMU dictionary, loading from cache if available.
+
+    Returns:
+        Dict[str, List[List[str]]]: The pronunciation dictionary.
+    """
     if os.path.exists(CACHE_PATH):
         with open(CACHE_PATH, "rb") as pickle_file:
             g2p_dict = pickle.load(pickle_file)
@@ -158,7 +189,15 @@ def get_dict():
 eng_dict = get_dict()
 
 
-def refine_ph(phn):
+def refine_ph(phn: str) -> Tuple[str, int]:
+    """Extract the base phoneme and its tone from a phoneme string.
+
+    Args:
+        phn (str): The phoneme string (optionally ending with a digit).
+
+    Returns:
+        Tuple[str, int]: A tuple containing the lowercased base phoneme and its tone.
+    """
     tone = 0
     if re.search(r"\d$", phn):
         tone = int(phn[-1]) + 1
@@ -166,9 +205,17 @@ def refine_ph(phn):
     return phn.lower(), tone
 
 
-def refine_syllables(syllables):
-    tones = []
-    phonemes = []
+def refine_syllables(syllables: List[List[str]]) -> Tuple[List[str], List[int]]:
+    """Flatten and refine a list of syllables into phonemes and tones.
+
+    Args:
+        syllables (List[List[str]]): A list of syllables, where each syllable is a list of phonemes.
+
+    Returns:
+        Tuple[List[str], List[int]]: A tuple containing a list of base phonemes and a list of tones.
+    """
+    tones: List[int] = []
+    phonemes: List[str] = []
     for phn_list in syllables:
         for i in range(len(phn_list)):
             phn = phn_list[i]
@@ -178,20 +225,40 @@ def refine_syllables(syllables):
     return phonemes, tones
 
 
-def text_normalize(text):
+def text_normalize(text: str) -> str:
+    """Normalize English text by expanding times, numbers, and abbreviations.
+
+    Args:
+        text (str): The input text to normalize.
+
+    Returns:
+        str: The normalized text.
+    """
     text = text.lower()
     text = expand_time_english(text)
     text = normalize_numbers(text)
     text = expand_abbreviations(text)
     return text
 
-model_id = 'bert-base-uncased'
+
+model_id = "bert-base-uncased"
 tokenizer = AutoTokenizer.from_pretrained(model_id)
-def g2p_old(text):
+
+
+def g2p_old(text: str) -> Tuple[List[str], List[int], List[int]]:
+    """Convert text to phonemes using the old logic.
+
+    Args:
+        text (str): The input text.
+
+    Returns:
+        Tuple[List[str], List[int], List[int]]: A tuple containing a list of phonemes,
+            a list of tones, and a list indicating word-to-phoneme mapping.
+    """
     tokenized = tokenizer.tokenize(text)
     # import pdb; pdb.set_trace()
-    phones = []
-    tones = []
+    phones: List[str] = []
+    tones: List[int] = []
     words = re.split(r"([,;.\-\?\!\s+])", text)
     for w in words:
         if w.upper() in eng_dict:
@@ -214,21 +281,35 @@ def g2p_old(text):
     phones = [post_replace_ph(i) for i in phones]
     return phones, tones, word2ph
 
-def g2p(text, pad_start_end=True, tokenized=None):
+
+def g2p(
+    text: str, pad_start_end: bool = True, tokenized: Optional[List[str]] = None
+) -> Tuple[List[str], List[int], List[int]]:
+    """Convert text to phonemes with padding and word-to-phoneme mapping.
+
+    Args:
+        text (str): The input text.
+        pad_start_end (bool, optional): Whether to pad the start and end of the phonemes. Defaults to True.
+        tokenized (Optional[List[str]], optional): An optional list of tokens. Defaults to None.
+
+    Returns:
+        Tuple[List[str], List[int], List[int]]: A tuple containing a list of phonemes,
+            a list of tones, and a list indicating word-to-phoneme mapping.
+    """
     if tokenized is None:
         tokenized = tokenizer.tokenize(text)
     # import pdb; pdb.set_trace()
-    phs = []
-    ph_groups = []
+    phs: List[str] = []
+    ph_groups: List[List[str]] = []
     for t in tokenized:
         if not t.startswith("#"):
             ph_groups.append([t])
         else:
             ph_groups[-1].append(t.replace("#", ""))
-    
-    phones = []
-    tones = []
-    word2ph = []
+
+    phones: List[str] = []
+    tones: List[int] = []
+    word2ph: List[int] = []
     for group in ph_groups:
         w = "".join(group)
         phone_len = 0
@@ -259,21 +340,38 @@ def g2p(text, pad_start_end=True, tokenized=None):
         word2ph = [1] + word2ph + [1]
     return phones, tones, word2ph
 
-def get_bert_feature(text, word2ph, device=None):
+
+def get_bert_feature(
+    text: str, word2ph: List[int], device: Optional[str] = None
+) -> torch.Tensor:
+    """Extract BERT features for the given text based on word-to-phone mapping.
+
+    Args:
+        text (str): The input English text.
+        word2ph (List[int]): A list indicating the number of phones each word maps to.
+        device (Optional[str], optional): The device to run the model on. Defaults to None.
+
+    Returns:
+        torch.Tensor: The phone-level BERT feature tensor.
+    """
     from text import english_bert
 
     return english_bert.get_bert_feature(text, word2ph, device=device)
+
 
 if __name__ == "__main__":
     # print(get_dict())
     # print(eng_word_to_phoneme("hello"))
     from text.english_bert import get_bert_feature
+
     text = "In this paper, we propose 1 DSPGAN, a N-F-T GAN-based universal vocoder."
     text = text_normalize(text)
     phones, tones, word2ph = g2p(text)
-    import pdb; pdb.set_trace()
+    import pdb
+
+    pdb.set_trace()
     bert = get_bert_feature(text, word2ph)
-    
+
     print(phones, tones, word2ph, bert.shape)
 
     # all_phones = set()

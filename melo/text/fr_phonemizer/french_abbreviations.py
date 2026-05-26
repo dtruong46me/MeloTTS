@@ -1,7 +1,10 @@
+"""Module containing abbreviation expansions for French text."""
+
 import re
+from typing import List, Tuple
 
 # List of (regular expression, replacement) pairs for abbreviations in french:
-abbreviations_fr = [
+abbreviations_fr: List[Tuple[re.Pattern, str]] = [
     (re.compile("\\b%s\\." % x[0], re.IGNORECASE), x[1])
     for x in [
         ("M", "monsieur"),

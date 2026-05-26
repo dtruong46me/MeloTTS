@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import typing
 
 # third-party
 import librosa
@@ -171,7 +172,7 @@ class TTS(nn.Module):
         noise_scale: float = 0.6,
         noise_scale_w: float = 0.8,
         speed: float = 1.0,
-        pbar=None,
+        pbar: typing.Callable | None = None,
         format: str | None = None,
         position: int | None = None,
         quiet: bool = False,

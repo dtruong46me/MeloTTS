@@ -1,3 +1,9 @@
+"""Module for normalizing time expressions in English text.
+
+This module provides functionality to expand time formats into their
+spoken word representations using regular expressions and the inflect library.
+"""
+
 import re
 
 import inflect
@@ -9,17 +15,33 @@ _time_re = re.compile(
                           ((0?[0-9])|(1[0-1])|(1[2-9])|(2[0-3]))  # hours
                           :
                           ([0-5][0-9])                            # minutes
-                          \s*(a\\.m\\.|am|pm|p\\.m\\.|a\\.m|p\\.m)? # am/pm
+                          \s*(a\.m\.|am|pm|p\.m\.|a\.m|p\.m)? # am/pm
                           \b""",
     re.IGNORECASE | re.X,
 )
 
 
 def _expand_num(n: int) -> str:
+    """Expand a number into words.
+
+    Args:
+        n (int): The number to expand.
+
+    Returns:
+        str: The expanded number string.
+    """
     return _inflect.number_to_words(n)
 
 
-def _expand_time_english(match: "re.Match") -> str:
+def _expand_time_english(match: re.Match) -> str:
+    """Expand a time regex match object into words.
+
+    Args:
+        match (re.Match): A regular expression match object containing the time.
+
+    Returns:
+        str: The expanded time string.
+    """
     hour = int(match.group(1))
     past_noon = hour >= 12
     time = []
@@ -44,4 +66,12 @@ def _expand_time_english(match: "re.Match") -> str:
 
 
 def expand_time_english(text: str) -> str:
+    """Expand time expressions in the given text.
+
+    Args:
+        text (str): The input text containing time expressions.
+
+    Returns:
+        str: The text with all time expressions normalized to words.
+    """
     return re.sub(_time_re, _expand_time_english, text)

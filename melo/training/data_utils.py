@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import os
 import random
-from typing import Optional
+from typing import Optional, Any, Iterator
 
 import numpy as np
 import torch
@@ -51,7 +51,7 @@ class TextAudioSpeakerLoader(torch.utils.data.Dataset):
         disable_bert: When ``True``, BERT tensors are replaced with zeros.
     """
 
-    def __init__(self, audiopaths_sid_text: str, hparams) -> None:
+    def __init__(self, audiopaths_sid_text: str, hparams: Any) -> None:
         """Initialise the dataset and filter samples by phoneme length.
 
         Args:
@@ -551,7 +551,7 @@ class DistributedBucketSampler(torch.utils.data.distributed.DistributedSampler):
             num_samples_per_bucket.append(len_bucket + rem)
         return buckets, num_samples_per_bucket
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[list[int]]:
         """Yield batches of dataset indices, grouped by length bucket.
 
         Each call uses ``self.epoch`` as the random seed to ensure deterministic

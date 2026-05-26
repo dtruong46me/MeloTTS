@@ -1,9 +1,15 @@
+"""Module containing dictionaries for Korean text normalization.
+
+This module provides dictionaries used to normalize specific symbols and English
+words into their Korean pronunciations for text-to-speech processing.
+"""
+
 # coding: utf-8
 # Add the word you want to the dictionary.
-etc_dictionary = {"1+1": "원플러스원", "2+1": "투플러스원"}
+etc_dictionary: dict[str, str] = {"1+1": "원플러스원", "2+1": "투플러스원"}
 
 
-english_dictionary = {
+english_dictionary: dict[str, str] = {
     "KOREA": "코리아",
     "IDOL": "아이돌",
     "IT": "아이티",

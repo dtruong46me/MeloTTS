@@ -1,16 +1,19 @@
+"""Module for handling punctuations in text processing."""
+
 import collections
 import re
 from enum import Enum
+from typing import List, Tuple, Any
 
 import six
 
-_DEF_PUNCS = ';:,.!?¡¿—…"«»“”'
+_DEF_PUNCS: str = ';:,.!?¡¿—…"«»“”'
 
 _PUNC_IDX = collections.namedtuple("_punc_index", ["punc", "position"])
 
 
 class PuncPosition(Enum):
-    """Enum for the punctuations positions"""
+    """Enum for the punctuation positions."""
 
     BEGIN = 0
     END = 1
@@ -40,53 +43,73 @@ class Punctuation:
         'This is. example !'
     """
 
-    def __init__(self, puncs: str = _DEF_PUNCS):
+    def __init__(self, puncs: str = _DEF_PUNCS) -> None:
+        """Initializes the Punctuation instance.
+
+        Args:
+            puncs (str): The punctuations to be processed. Defaults to _DEF_PUNCS.
+        """
         self.puncs = puncs
 
     @staticmethod
-    def default_puncs():
-        """Return default set of punctuations."""
+    def default_puncs() -> str:
+        """Return default set of punctuations.
+
+        Returns:
+            str: The default punctuations string.
+        """
         return _DEF_PUNCS
 
     @property
-    def puncs(self):
+    def puncs(self) -> str:
+        """str: The string of punctuation characters."""
         return self._puncs
 
     @puncs.setter
-    def puncs(self, value):
+    def puncs(self, value: str) -> None:
         if not isinstance(value, six.string_types):
             raise ValueError("[!] Punctuations must be of type str.")
-        self._puncs = "".join(list(dict.fromkeys(list(value))))  # remove duplicates without changing the oreder
+        self._puncs = "".join(list(dict.fromkeys(list(value))))  # remove duplicates without changing the order
         self.puncs_regular_exp = re.compile(rf"(\s*[{re.escape(self._puncs)}]+\s*)+")
 
-    def strip(self, text):
+    def strip(self, text: str) -> str:
         """Remove all the punctuations by replacing with `space`.
 
         Args:
             text (str): The text to be processed.
 
-        Example::
+        Returns:
+            str: The text without punctuations.
 
+        Example::
             "This is. example !" -> "This is example "
         """
         return re.sub(self.puncs_regular_exp, " ", text).rstrip().lstrip()
 
-    def strip_to_restore(self, text):
+    def strip_to_restore(self, text: str) -> Tuple[List[str], List[Any]]:
         """Remove punctuations from text to restore them later.
 
         Args:
             text (str): The text to be processed.
 
+        Returns:
+            Tuple[List[str], List[Any]]: A tuple containing the split text and the punctuation map.
+
         Examples ::
-
-            "This is. example !" -> [["This is", "example"], [".", "!"]]
-
+            "This is. example !" -> (["This is", "example"], [".", "!"])
         """
-        text, puncs = self._strip_to_restore(text)
-        return text, puncs
+        text_split, puncs = self._strip_to_restore(text)
+        return text_split, puncs
 
-    def _strip_to_restore(self, text):
-        """Auxiliary method for Punctuation.preserve()"""
+    def _strip_to_restore(self, text: str) -> Tuple[List[str], List[Any]]:
+        """Auxiliary method for strip_to_restore to do the actual processing.
+
+        Args:
+            text (str): The text to be processed.
+
+        Returns:
+            Tuple[List[str], List[Any]]: The split text and list of punctuation metadata.
+        """
         matches = list(re.finditer(self.puncs_regular_exp, text))
         if not matches:
             return [text], []
@@ -115,23 +138,33 @@ class Punctuation:
         return splitted_text, puncs
 
     @classmethod
-    def restore(cls, text, puncs):
+    def restore(cls, text: List[str], puncs: List[Any]) -> List[str]:
         """Restore punctuation in a text.
 
         Args:
-            text (str): The text to be processed.
-            puncs (List[str]): The list of punctuations map to be used for restoring.
+            text (List[str]): The text parts to be processed.
+            puncs (List[Any]): The list of punctuations map to be used for restoring.
+
+        Returns:
+            List[str]: The restored text.
 
         Examples ::
-
-            ['This is', 'example'], ['.', '!'] -> "This is. example!"
-
+            ['This is', 'example'], ['.', '!'] -> ["This is. example!"]
         """
         return cls._restore(text, puncs, 0)
 
     @classmethod
-    def _restore(cls, text, puncs, num):  # pylint: disable=too-many-return-statements
-        """Auxiliary method for Punctuation.restore()"""
+    def _restore(cls, text: List[str], puncs: List[Any], num: int) -> List[str]:  # pylint: disable=too-many-return-statements
+        """Auxiliary recursive method for restore.
+
+        Args:
+            text (List[str]): The text parts.
+            puncs (List[Any]): The punctuation metadata map.
+            num (int): Current recursion depth / index.
+
+        Returns:
+            List[str]: The restored text items.
+        """
         if not puncs:
             return text
 
@@ -148,7 +181,7 @@ class Punctuation:
             return [text[0] + current.punc] + cls._restore(text[1:], puncs[1:], num + 1)
 
         if current.position == PuncPosition.ALONE:
-            return [current.mark] + cls._restore(text, puncs[1:], num + 1)
+            return [current.punc] + cls._restore(text, puncs[1:], num + 1)
 
         # POSITION == MIDDLE
         if len(text) == 1:  # pragma: nocover
@@ -157,16 +190,3 @@ class Punctuation:
             return cls._restore([text[0] + current.punc], puncs[1:], num)
 
         return cls._restore([text[0] + current.punc + text[1]] + text[2:], puncs[1:], num)
-
-
-# if __name__ == "__main__":
-#     punc = Punctuation()
-#     text = "This is. This is, example!"
-
-#     print(punc.strip(text))
-
-#     split_text, puncs = punc.strip_to_restore(text)
-#     print(split_text, " ---- ", puncs)
-
-#     restored_text = punc.restore(split_text, puncs)
-#     print(restored_text)
