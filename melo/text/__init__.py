@@ -80,13 +80,13 @@ def get_bert(
     Returns:
         torch.Tensor: A torch.Tensor of BERT features with shape (hidden_size, num_phones).
     """
-    from .chinese_bert import get_bert_feature as zh_bert
-    from .english_bert import get_bert_feature as en_bert
-    from .japanese_bert import get_bert_feature as jp_bert
-    from .chinese_mix import get_bert_feature as zh_mix_en_bert
-    from .spanish_bert import get_bert_feature as sp_bert
-    from .french_bert import get_bert_feature as fr_bert
-    from .korean import get_bert_feature as kr_bert
+    from .zh.bert import get_bert_feature as zh_bert
+    from .en.bert import get_bert_feature as en_bert
+    from .bert import get_bert_feature as jp_bert
+    from .zh.mix import get_bert_feature as zh_mix_en_bert
+    from .bert import get_bert_feature as sp_bert
+    from .bert import get_bert_feature as fr_bert
+    from .kr.core import get_bert_feature as kr_bert
 
     # Maps each supported language code to its BERT feature-extraction function.
     # Note: both 'SP' (Spanish shorthand) and 'ES' (ISO 639-1) share the same

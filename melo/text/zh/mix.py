@@ -248,7 +248,7 @@ def get_bert_feature(text: str, word2ph: List[int], device: str) -> Any:
     Returns:
         Any: The extracted BERT features.
     """
-    from . import chinese_bert
+    from . import bert as chinese_bert
     return chinese_bert.get_bert_feature(text, word2ph, model_id='bert-base-multilingual-uncased', device=device)
 
 from .chinese import _g2p as _chinese_g2p

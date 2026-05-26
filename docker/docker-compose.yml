@@ -3,7 +3,7 @@ version: "3.9"
 services:
   melo-ui:
     build:
-      context: ..       # Build from the project root so COPY . /app works
+      context: ..
       dockerfile: docker/Dockerfile
     image: melotts:latest
     container_name: melotts_ui
@@ -12,3 +12,33 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
     restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  melo-train:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: melotts:latest
+    container_name: melotts_train
+    volumes:
+      - ../data:/app/data
+      - ../logs:/app/logs
+      - ../configs:/app/configs
+    environment:
+      - PYTHONUNBUFFERED=1
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    # By default, do nothing so the container doesn't exit immediately,
+    # or you can override this command when running `docker-compose run melo-train bash melo/scripts/train.sh ...`
+    command: tail -f /dev/null

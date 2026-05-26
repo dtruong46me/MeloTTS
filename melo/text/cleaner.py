@@ -13,8 +13,14 @@ from typing import Optional
 
 import torch
 
-from . import chinese, japanese, english, chinese_mix, korean, french, spanish
-from . import cleaned_text_to_sequence
+from .zh import core as chinese
+from .jp import core as japanese
+from .en import core as english
+from .zh import mix as chinese_mix
+from .kr import core as korean
+from .fr import core as french
+from .es import core as spanish
+from .. import cleaned_text_to_sequence
 
 
 # Maps language code strings to their corresponding language-processing modules.
