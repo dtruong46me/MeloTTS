@@ -11,9 +11,9 @@ from typing import Any, List, Optional, Tuple
 
 from transformers import AutoTokenizer
 
-from . import symbols
-from .es_phonemizer import cleaner as es_cleaner
-from .es_phonemizer import es_to_ipa
+from .. import symbols
+from .phonemizer import cleaner as es_cleaner
+from .phonemizer import es_to_ipa
 
 model_id = "dccuchile/bert-base-spanish-wwm-uncased"
 tokenizer = AutoTokenizer.from_pretrained(model_id)
@@ -183,7 +183,7 @@ def get_bert_feature(text: str, word2ph: List[int], device: Optional[str] = None
     Returns:
         Any: The extracted BERT features as a PyTorch tensor.
     """
-    from text import spanish_bert
+    from . import bert as spanish_bert
     return spanish_bert.get_bert_feature(text, word2ph, device=device)
 
 

@@ -128,7 +128,7 @@ def main(share: bool, host: str | None, port: int | None) -> None:
         host: Hostname or IP address to bind the server to.
         port: TCP port to listen on.  ``None`` lets Gradio choose a free port.
     """
-    demo.queue(api_open=False).launch(show_api=False, share=share, server_name=host, server_port=port)
+    demo.queue(api_open=False).launch(share=share, server_name=host, server_port=port)
 
 
 if __name__ == "__main__":

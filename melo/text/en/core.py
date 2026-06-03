@@ -13,11 +13,11 @@ import torch
 from g2p_en import G2p
 from transformers import AutoTokenizer
 
-from . import symbols
-from .english_utils.abbreviations import expand_abbreviations
-from .english_utils.number_norm import normalize_numbers
-from .english_utils.time_norm import expand_time_english
-from .japanese import distribute_phone
+from .. import symbols
+from .utils.abbreviations import expand_abbreviations
+from .utils.number_norm import normalize_numbers
+from .utils.time_norm import expand_time_english
+from ..jp.core import distribute_phone
 
 current_file_path = os.path.dirname(__file__)
 CMU_DICT_PATH = os.path.join(current_file_path, "cmudict.rep")
@@ -354,7 +354,7 @@ def get_bert_feature(
     Returns:
         torch.Tensor: The phone-level BERT feature tensor.
     """
-    from text import english_bert
+    from . import bert as english_bert
 
     return english_bert.get_bert_feature(text, word2ph, device=device)
 
@@ -362,7 +362,7 @@ def get_bert_feature(
 if __name__ == "__main__":
     # print(get_dict())
     # print(eng_word_to_phoneme("hello"))
-    from text.english_bert import get_bert_feature
+    from .bert import get_bert_feature
 
     text = "In this paper, we propose 1 DSPGAN, a N-F-T GAN-based universal vocoder."
     text = text_normalize(text)

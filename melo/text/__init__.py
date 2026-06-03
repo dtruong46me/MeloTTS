@@ -82,10 +82,10 @@ def get_bert(
     """
     from .zh.bert import get_bert_feature as zh_bert
     from .en.bert import get_bert_feature as en_bert
-    from .bert import get_bert_feature as jp_bert
+    from .jp.bert import get_bert_feature as jp_bert
     from .zh.mix import get_bert_feature as zh_mix_en_bert
-    from .bert import get_bert_feature as sp_bert
-    from .bert import get_bert_feature as fr_bert
+    from .es.bert import get_bert_feature as sp_bert
+    from .fr.bert import get_bert_feature as fr_bert
     from .kr.core import get_bert_feature as kr_bert
 
     # Maps each supported language code to its BERT feature-extraction function.

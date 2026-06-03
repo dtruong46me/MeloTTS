@@ -11,11 +11,11 @@ import unicodedata
 
 from transformers import AutoTokenizer
 
-from . import punctuation, symbols
+from .. import punctuation, symbols
 
 
 from num2words import num2words
-from melo.text.ko_dictionary import english_dictionary, etc_dictionary
+from .ko_dictionary import english_dictionary, etc_dictionary
 from anyascii import anyascii
 from jamo import hangul_to_jamo
 
@@ -215,7 +215,7 @@ def get_bert_feature(text: str, word2ph: list[int], device: str = 'cuda') -> "to
     Returns:
         torch.Tensor: The extracted BERT features at the phoneme level.
     """
-    from . import japanese_bert
+    from ..jp import bert as japanese_bert
     return japanese_bert.get_bert_feature(text, word2ph, device=device, model_id=model_id)
 
 

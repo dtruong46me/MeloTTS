@@ -3,18 +3,24 @@
 Package layout::
 
     melo/
-    ├── nn/          Neural network building blocks (models, modules, losses…)
-    ├── audio/       Audio / DSP utilities (mel-spectrogram, STFT…)
-    ├── text/        Text normalisation and G2P per language
-    ├── training/    Training loop and dataset utilities
-    ├── monotonic_align/  C extension for monotonic alignment
-    ├── api.py       High-level TTS inference API
-    ├── app.py       Gradio WebUI entry point
-    ├── infer.py     CLI inference script
-    ├── main.py      Main CLI entry point (``melo`` / ``melotts`` command)
-    ├── split_utils.py   Sentence-splitting utilities
-    ├── download_utils.py  Model download helpers
-    └── utils.py     General utilities (checkpoint I/O, HParams, logging…)
+    ├── nn/              Neural network building blocks (models, modules, losses…)
+    ├── audio/           Audio / DSP utilities (mel-spectrogram, STFT…)
+    ├── text/            Text normalisation and G2P, one sub-package per language
+    │   ├── zh/          Chinese (core, bert, mix, tone_sandhi)
+    │   ├── en/          English (core, bert, utils/)
+    │   ├── fr/          French  (core, bert, phonemizer/)
+    │   ├── es/          Spanish (core, bert, phonemizer/)
+    │   ├── jp/          Japanese (core, bert)
+    │   └── kr/          Korean  (core, ko_dictionary)
+    ├── training/        Training loop and dataset utilities
+    ├── cli/             CLI entry points
+    │   ├── main.py      ``melo`` / ``melotts`` command  (text → WAV)
+    │   └── infer.py     ``melo-infer`` command (checkpoint → WAV per speaker)
+    ├── ui/
+    │   └── app.py       ``melo-ui`` command  (Gradio WebUI)
+    ├── utils/           Config schema, checkpoint helpers, audio loaders…
+    ├── scripts/         Shell / Python helper scripts (train.sh, preprocess_text.py…)
+    └── api.py           High-level TTS inference API
 
 Quick start::
 

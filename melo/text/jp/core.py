@@ -11,7 +11,7 @@ import unicodedata
 
 from transformers import AutoTokenizer
 
-from . import symbols
+from .. import symbols
 punctuation = ["!", "?", "…", ",", ".", "'", "-"]
 
 try:
@@ -390,7 +390,24 @@ def hira2kata(text: str) -> str:
 
 _SYMBOL_TOKENS = set(list("・、。？！"))
 _NO_YOMI_TOKENS = set(list("「」『』―（）［］[]"))
-_TAGGER = MeCab.Tagger()
+
+# Lazy-initialized MeCab tagger. Initialized on first call to text2kata() so
+# that importing this module does not require the unidic dictionary to be
+# present (run `python -m unidic download` once after install).
+_TAGGER: "MeCab.Tagger | None" = None
+
+
+def _get_tagger() -> "MeCab.Tagger":
+    """Return the MeCab tagger, initializing it on first call.
+
+    Raises:
+        RuntimeError: If MeCab cannot be initialized (e.g. unidic not
+            downloaded).  Run ``python -m unidic download`` to fix.
+    """
+    global _TAGGER  # noqa: PLW0603
+    if _TAGGER is None:
+        _TAGGER = MeCab.Tagger()
+    return _TAGGER
 
 
 def text2kata(text: str) -> str:
@@ -402,7 +419,7 @@ def text2kata(text: str) -> str:
     Returns:
         str: The converted katakana text.
     """
-    parsed = _TAGGER.parse(text)
+    parsed = _get_tagger().parse(text)
     res = []
     for line in parsed.split("\n"):
         if line == "EOS":
@@ -721,7 +738,7 @@ def get_bert_feature(text: str, word2ph: list[int], device: str) -> "torch.Tenso
     Returns:
         torch.Tensor: The extracted BERT features at the phoneme level.
     """
-    from text import japanese_bert
+    from . import bert as japanese_bert
 
     return japanese_bert.get_bert_feature(text, word2ph, device=device)
 
@@ -731,7 +748,7 @@ if __name__ == "__main__":
     text = "こんにちは、世界！..."
     text = 'ええ、僕はおきなと申します。こちらの小さいわらべは杏子。ご挨拶が遅れてしまいすみません。あなたの名は?'
     text = 'あの、お前以外のみんなは、全員生きてること?'
-    from text.japanese_bert import get_bert_feature
+    from .bert import get_bert_feature
 
     text = text_normalize(text)
     print(text)

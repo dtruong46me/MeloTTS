@@ -1,6 +1,6 @@
 [build-system]
 requires = ["setuptools>=68", "wheel"]
-build-backend = "setuptools.backends.legacy:build"
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "melotts"
@@ -9,16 +9,17 @@ description = "Multi-lingual Text-to-Speech library with high-quality voices"
 readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.9"
-dependencies = [
-    # requirements are listed in requirements.txt for flexibility;
-    # see that file for the full pinned dependency list.
-]
+
 dynamic = ["dependencies"]
 
 [project.scripts]
-melotts   = "melo.cli.main:main"
-melo      = "melo.cli.main:main"
-melo-ui   = "melo.ui.app:main"
+# Primary TTS CLI: synthesise a single text string to WAV
+melotts    = "melo.cli.main:main"
+melo       = "melo.cli.main:main"
+# Load a local checkpoint and run inference per-speaker
+melo-infer = "melo.cli.infer:main"
+# Launch the Gradio WebUI
+melo-ui    = "melo.ui.app:main"
 
 [tool.setuptools]
 packages = { find = {} }

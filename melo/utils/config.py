@@ -64,7 +64,10 @@ class ConfigSchema(BaseModel):
     data: DataConfig
     model: ModelConfig
     
-    # Extra fields added during runtime (CLI arguments)
+    # Extra fields added during runtime (CLI arguments) or in pre-trained configs
+    num_languages: Optional[int] = None
+    num_tones: Optional[int] = None
+    symbols: Optional[List[str]] = None
     model_dir: Optional[str] = None
     pretrain_G: Optional[str] = None
     pretrain_D: Optional[str] = None

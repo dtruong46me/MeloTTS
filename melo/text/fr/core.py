@@ -5,9 +5,9 @@ import os
 import re
 from typing import List, Tuple, Any, Optional, Dict
 
-from . import symbols
-from .fr_phonemizer import cleaner as fr_cleaner
-from .fr_phonemizer import fr_to_ipa
+from .. import symbols
+from .phonemizer import cleaner as fr_cleaner
+from .phonemizer import fr_to_ipa
 from transformers import AutoTokenizer
 
 
@@ -111,7 +111,7 @@ def get_bert_feature(text: str, word2ph: List[int], device: Optional[Any] = None
     Returns:
         Any: The BERT features corresponding to the input text.
     """
-    from text import french_bert
+    from . import bert as french_bert
     return french_bert.get_bert_feature(text, word2ph, device=device)
 
 

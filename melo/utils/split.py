@@ -48,8 +48,8 @@ def split_sentences_latin(text: str, min_len: int = 10) -> List[str]:
     """
     text = re.sub('[。！？；]', '.', text)
     text = re.sub('[，]', ',', text)
-    text = re.sub('[""]', '\"', text)
-    text = re.sub('['']', "'", text)
+    text = re.sub(r'[\u201c\u201d]', '"', text)
+    text = re.sub(r"[\u2018\u2019]", "'", text)
     text = re.sub(r"[<>\(\)\[\]\"«»]+", "", text)
     return [item.strip() for item in txtsplit(text, 256, 512) if item.strip()]
 

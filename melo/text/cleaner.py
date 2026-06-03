@@ -20,7 +20,7 @@ from .zh import mix as chinese_mix
 from .kr import core as korean
 from .fr import core as french
 from .es import core as spanish
-from .. import cleaned_text_to_sequence
+from . import cleaned_text_to_sequence
 
 
 # Maps language code strings to their corresponding language-processing modules.

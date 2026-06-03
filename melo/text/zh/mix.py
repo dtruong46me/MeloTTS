@@ -10,9 +10,9 @@ from pypinyin import lazy_pinyin, Style
 from transformers import AutoTokenizer
 
 # from text.symbols import punctuation
-from .symbols import language_tone_start_map
+from ..symbols import language_tone_start_map
 from .tone_sandhi import ToneSandhi
-from .english import g2p as g2p_en
+from ..en.core import g2p as g2p_en
 
 punctuation = ["!", "?", "…", ",", ".", "'", "-"]
 current_file_path = os.path.dirname(__file__)
@@ -251,7 +251,7 @@ def get_bert_feature(text: str, word2ph: List[int], device: str) -> Any:
     from . import bert as chinese_bert
     return chinese_bert.get_bert_feature(text, word2ph, model_id='bert-base-multilingual-uncased', device=device)
 
-from .chinese import _g2p as _chinese_g2p
+from .core import _g2p as _chinese_g2p
 def _g2p_v2(segments: List[str]) -> Tuple[List[str], List[int], List[int]]:
     """Internal function to convert segments to phonemes and tones (v2).
 

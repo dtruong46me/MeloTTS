@@ -7,7 +7,7 @@ from typing import List, Tuple, Optional, Any
 import cn2an
 from pypinyin import lazy_pinyin, Style
 
-from .symbols import punctuation
+from ..symbols import punctuation
 from .tone_sandhi import ToneSandhi
 
 current_file_path = os.path.dirname(__file__)
@@ -230,13 +230,13 @@ def get_bert_feature(text: str, word2ph: List[int], device: Optional[str] = None
     Returns:
         Any: The extracted BERT features.
     """
-    from text import chinese_bert
+    from . import bert as chinese_bert
 
     return chinese_bert.get_bert_feature(text, word2ph, device=device)
 
 
 if __name__ == "__main__":
-    from text.chinese_bert import get_bert_feature
+    from .bert import get_bert_feature
 
     text = "啊！chemistry 但是《原神》是由,米哈\游自主，  [研发]的一款全.新开放世界.冒险游戏"
     text = text_normalize(text)
